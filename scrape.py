@@ -130,12 +130,12 @@
 #     pd.DataFrame(reviews).to_csv("reviews.csv", index=False)
 #     pd.DataFrame(price).to_csv("competitor_data.csv", index=False)
 
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
-from datetime import datetime
-import time
-import random
+import requests  # Library for making HTTP requests to fetch web pages
+from bs4 import BeautifulSoup  # Library for parsing HTML and XML documents
+import pandas as pd  # Library for data manipulation and analysis
+from datetime import datetime  # Library for handling date and time
+import time  # Library for time-related functions (e.g., delays)
+import random  # Library for generating random numbers
 
 
 def scrape_product_data(url):
