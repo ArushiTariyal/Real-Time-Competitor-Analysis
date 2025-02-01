@@ -137,83 +137,117 @@ from datetime import datetime
 import time
 import random
 
+
 def scrape_product_data(url):
     """Scrape product data from e-commerce website."""
+
+    # Define headers to mimic a real browser request
+    #Headers for Web Requests: The headers dictionary is used to mimic a real browser request. This helps avoid being blocked by the website for scraping.
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
-    
+
     try:
+        # Send a GET request to the product URL
         response = requests.get(url, headers=headers)
+
+        # Parse the HTML content using BeautifulSoup
         soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Extract product details
-        product_name = soup.find('span', {'class': 'product-title'}).text.strip()
-        price = float(soup.find('span', {'class': 'price'}).text.replace('₹', '').replace(',', '').strip())
-        discount = float(soup.find('span', {'class': 'discount'}).text.replace('%', '').strip())
-        
+
+        # Extract product name
+        product_name = soup.find('span', {'id': 'productTitle'}).text.strip()
+
+        # Extract product price and convert it to a float (remove currency symbol and commas)
+        price = float(soup.find('span', {'class': 'a-price-whole'}).text.replace('₹', '').replace(',', '').strip())
+
+        # Extract discount percentage and convert it to a float (remove percentage symbol)
+        discount = float(soup.find('span', {'class': "a-size-large a-color-price savingPriceOverride aok-align-center reinventPriceSavingsPercentageMargin savingsPercentage"}).text.replace('%', '').strip())
+
         # Get reviews if available
         reviews = []
-        review_elements = soup.find_all('div', {'class': 'review'})
-        for review in review_elements[:5]:  # Get latest 5 reviews
+        review_elements = soup.find_all('div', {'class': 'a-expander-content reviewText review-text-content a-expander-partial-collapse-content'})
+
+        # Loop through the first 5 reviews and extract review text and rating
+        for review in review_elements[:5]:  # Get latest 5 reviews for simplicity
             review_text = review.find('p').text.strip()
             rating = float(review.find('span', {'class': 'rating'}).text.strip())
+
+            # Append each review to the reviews list
             reviews.append({
                 'review_text': review_text,
                 'rating': rating,
-                'date': datetime.now().strftime('%Y-%m-%d')
+                'date': datetime.now().strftime('%Y-%m-%d')  # Add current date to the review
             })
-        
+
+        # Return the scraped product data and reviews
         return {
             'product_data': {
                 'product_name': product_name,
                 'price': price,
                 'discount': discount,
-                'date': datetime.now().strftime('%Y-%m-%d')
+                'date': datetime.now().strftime('%Y-%m-%d')  # Add current date to the product data
             },
             'reviews': reviews
         }
-        
+
     except Exception as e:
+        # Print any errors that occur during scraping
         print(f"Error scraping data: {str(e)}")
         return None
 
+
 def update_csv_files(product_data, reviews):
     """Update CSV files with new data."""
-    # Update competitor_data.csv
+
     try:
+        # Convert product data to a DataFrame and append it to 'competitor_data.csv'
+        #The update_csv_files function appends the scraped product data and reviews to existing CSV files (competitor_data.csv and reviews.csv).
+        # The mode='a' parameter in to_csv ensures that new data is appended to the existing files without overwriting them.
+
         df_products = pd.DataFrame([product_data])
         df_products.to_csv('competitor_data.csv', mode='a', header=False, index=False)
-        
-        # Update reviews.csv
+
+        # Convert reviews data to a DataFrame and append it to 'reviews.csv'
         if reviews:
             df_reviews = pd.DataFrame(reviews)
             df_reviews.to_csv('reviews.csv', mode='a', header=False, index=False)
-            
+
         return True
     except Exception as e:
+        # Print any errors that occur during CSV file updates
         print(f"Error updating CSV files: {str(e)}")
         return False
+
 
 def main():
     # List of competitor URLs to monitor
     competitor_urls = [
-        'https://example.com/product1',
-        'https://example.com/product2',
-        # Add more URLs as needed
+        'https://www.amazon.in/Apple-AirPods-Generation-MagSafe-USB%E2%80%91C/dp/B0CHX719JD/ref=sr_1_3?crid=98YV2CHWS3P6&dib=eyJ2IjoiMSJ9.eAsYHuN12gq3JlC28Fid-130szldDdEcc_yNkk6ksXOdUeT_QK0qt2rfbIvKpcP4uj2Zjtg-OjVVgxiFUfA4rtNT0Tz-VQTa8udIJMZDXpBTxvRCWcQl2KV2jHqGg7DXEf_deHjoDmIa2Lnm-BOnnkt5Dj6r59vqdbH-gw8GjZNmgDOq6ETeswvPfzS2kFy3CH01d2FHjhHZ_p4Zm1GNsFeQJ1WzL5AmApX_pSdenDg.Nj4Au_NQPT2usO3DyJQzOLdEo1s1UxHeL_PiKg_-bPg&dib_tag=se&keywords=apple+airpods+2nd+generation&nsdOptOutParam=true&qid=1738388720&sprefix=apple+airpods+%2Caps%2C250&sr=8-3'
+        'https://www.amazon.in/Bose-QuietComfort-Cancelling-World-Class-Cancellation/dp/B0CD2FSRDD/ref=sr_1_4?crid=3K56VNLUIVADS&dib=eyJ2IjoiMSJ9.gdiXMxJTGVgPQI_U2BdWauUYa3wflRhI8xADHIIxbbKA-i5SkGSziLTwGsg5CfUEaTyPB3qcxUJKMTz2TQ1-27-tH79iVmdiG-w7QuqFPlnaEXlxFtLND_-kBW3SYVhD6D1lu_w6TLePal491t5-eKR9PsvaMjH6eLYyb8sITydjkDrNyb0IDEhvsjKNADsTmrRccl3b_sizeGNbOIKzIQmYjwChKusGHEty5rYAi6s.U_KOdn9S9GpbrYca2V7AnTUMQS0CBbnnt84Azw7NTmA&dib_tag=se&keywords=bose%2Bquiet%2Bcomfort%2B2&nsdOptOutParam=true&qid=1738388787&sprefix=bose%2Bquiet%2Bcomfort%2B2%2Caps%2C286&sr=8-4&th=1'
+        # We can add more URLs as needed
     ]
-    
+
+    # Infinite loop to continuously monitor the competitor URLs
+    #The main function contains an infinite loop that continuously monitors the competitor URLs.
+    # It scrapes data from each URL, updates the CSV files, and then waits for a random delay (2-5 seconds) before moving to the next URL.
+    # After completing one cycle of scraping all URLs, it waits for 1 hour before starting the next cycle.
+
     while True:
         for url in competitor_urls:
+            # Scrape product data from the current URL
             data = scrape_product_data(url)
+
+            # If data is successfully scraped, update the CSV files
             if data:
                 update_csv_files(data['product_data'], data['reviews'])
-            
-            # Random delay between requests (2-5 seconds)
+
+            # Add a random delay between requests (2-5 seconds) to avoid being blocked and detected as a bot by the website.
             time.sleep(random.uniform(2, 5))
-        
-        # Wait for 1 hour before next update
+
+        # Wait for 1 hour before the next update cycle
         time.sleep(3600)
 
+
 if __name__ == "__main__":
+    # Run the main function when the script is executed
     main()
