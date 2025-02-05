@@ -1,218 +1,219 @@
 # Import necessary libraries
-import json  # For handling JSON data
-import time  # For adding delays and timing operations
-from datetime import datetime  # For working with date and time
-import pandas as pd  # For data manipulation and analysis
-import requests  # For making HTTP requests
-import plotly.express as px  # For data visualization
-import streamlit as st  # For building web applications
-from selenium import webdriver  # For web scraping using Selenium
-from selenium.webdriver.chrome.options import Options  # For setting Chrome options
-from selenium.webdriver.chrome.service import Service  # For managing the ChromeDriver service
-from selenium.webdriver.common.by import By  # For locating elements in the DOM
-from selenium.webdriver.support import expected_conditions as EC  # For setting expected conditions
-from selenium.webdriver.support.wait import WebDriverWait  # For waiting until an element is found
-from webdriver_manager.chrome import ChromeDriverManager  # For managing the ChromeDriver version
-import chromedriver_autoinstaller  # For automatically installing the correct ChromeDriver version
-from transformers import pipeline  # For using pre-trained models from Hugging Face
-from sklearn.ensemble import RandomForestRegressor  # For machine learning regression tasks
-from sklearn.model_selection import train_test_split  # For splitting data into training and testing sets
-from statsmodels.tsa.arima.model import ARIMA  # For time series forecasting using ARIMA
-from selenium.webdriver.chrome.service import Service  # Duplicate import, can be removed
+import json
+import time
+from datetime import datetime
+import pandas as pd
+import requests
+import plotly.express as px
+import streamlit as st
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
+import chromedriver_autoinstaller
+from transformers import pipeline
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+from statsmodels.tsa.arima.model import ARIMA
+from selenium.webdriver.chrome.service import Service
 
-# Dictionary to store product links
 links = {
-    "Apple iPhone 13 (128GB) - Green": "https://www.amazon.in/Apple-iPhone-13-128GB-Green/dp/B09V4B6K53...",
+    "Apple iPhone 13 (128GB) - Green": "https://www.amazon.in/Apple-iPhone-13-128GB-Green/dp/B09V4B6K53/ref=sr_1_1_sspa?crid=2XWF6OQBE9MW2&dib=eyJ2IjoiMSJ9.4Amcm6ymShwYf2cUNy6g87ZAmr160niWSMsGfJ6ktkhVvBfKClhwZifyFoyaaxp3p9CgrK4JD0kka6vg2gnarqoOb62duNBPCD13Tp0i69vRDmk4uzfDB-25bgoJNhIMNFEoNjBAjmfxVst_C0QmW8zulZt3XeCwXmXb04f26KHMlZ8v3WYOdj3IywjwNuQ1kRaqWcGGKYG5719prdWaQTuqcco0NBNjnzPCNlPyH_Y.GrzT8mZU2IyaErRyD0CZZeRLmD9_fnsrr95RqbZorhw&dib_tag=se&keywords=iphone&qid=1737998659&sprefix=iphone%2Caps%2C238&sr=8-1-spons&sp_csd=d2lkZ2V0TmFtZT1zcF9hdGY&th=1",
 }
+import chromedriver_autoinstaller
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 
-# Function to configure and return a Chrome WebDriver instance
+
 def get_driver():
-    chrome_options = Options()  # Initialize Chrome options
-    chrome_options.add_argument("--headless")  # Run in headless mode (no GUI)
-    chrome_options.add_argument("--no-sandbox")  # Disable sandboxing (useful for running in containers)
-    chrome_options.add_argument("--disable-dev-shm-usage")  # Avoid issues with shared memory
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
 
-    chromedriver_autoinstaller.install()  # Automatically install the correct version of ChromeDriver
+    # Automatically install the chromedriver version that matches the chromium version
+    chromedriver_autoinstaller.install()
 
-    driver = webdriver.Chrome(options=chrome_options)  # Initialize Chrome WebDriver with options
-    return driver  # Return the driver instance
+    # Create the webdriver with the options and use the default path
+    driver = webdriver.Chrome(options=chrome_options)
+    return driver
 
-# Function to scrape product details from a given link
+
 def scrape_product_data(link):
-    driver = get_driver()  # Get a new Chrome WebDriver instance
-    driver.set_window_size(1920, 1080)  # Set window size for consistency
-    driver.get(link)  # Open the product link
-
-    # Initialize product data dictionary
+    driver = get_driver()
+    driver.set_window_size(1920, 1080)
+    driver.get(link)
     product_data = {
-        "product_name": "",  # Placeholder for product name
-        "selling price": 0,  # Placeholder for selling price
-        "original price": 0,  # Placeholder for original price
-        "discount": 0,  # Placeholder for discount
-        "rating": 0,  # Placeholder for rating
-        "reviews": [],  # Placeholder for reviews
-        "product_url": link,  # Store product URL
-        "date": datetime.now().strftime("%Y-%m-%d"),  # Store current date
+        "product_name": "",  # Add product_name to the dictionary
+        "selling price": 0,
+        "original price": 0,
+        "discount": 0,
+        "rating": 0,
+        "reviews": [],
+        "product_url": link,
+        "date": datetime.now().strftime("%Y-%m-%d"),
     }
-
-    retry = 0  # Retry counter for handling failures
-    while retry < 3:  # Try scraping up to 3 times
+    retry = 0
+    while retry < 3:
         try:
-            driver.save_screenshot("screenshot.png")  # Take a screenshot for debugging
-            wait = WebDriverWait(driver, 10)  # Set up explicit wait for 10 seconds
-            wait.until(EC.presence_of_element_located((By.CLASS_NAME, "a-offscreen")))  # Wait for price element
-            break  # Exit retry loop if successful
+            driver.save_screenshot("screenshot.png")
+            wait = WebDriverWait(driver, 10)
+            wait.until(EC.presence_of_element_located((By.CLASS_NAME, "a-offscreen")))
+            break
         except Exception as e:
-            print(f"Retrying... Error: {e}")  # Print error message
-            retry += 1  # Increment retry counter
-            driver.get(link)  # Reload the page
-            time.sleep(5)  # Wait before retrying
+            print(f"Retrying... Error: {e}")
+            retry += 1
+            driver.get(link)
+            time.sleep(5)
 
-    # Try extracting selling price
     try:
         price_elem = driver.find_element(
             By.XPATH, '//*[@id="corePriceDisplay_desktop_feature_div"]/div[1]/span[3]/span[2]/span[2]'
         )
-        product_data["selling price"] = int("".join(price_elem.text.strip().split(",")))  # Convert price to integer
+        product_data["selling price"] = int("".join(price_elem.text.strip().split(",")))
     except Exception as e:
-        print(f"Error extracting selling price: {e}")  # Print error message
+        print(f"Error extracting selling price: {e}")
 
-    # Try extracting original price
     try:
         original_price = driver.find_element(
             By.XPATH, '//*[@id="corePriceDisplay_desktop_feature_div"]/div[2]/span/span[1]/span[2]/span/span[2]'
         ).text
-        product_data["original price"] = extract_price(original_price)  # Convert price text to integer
+        product_data["original price"] = extract_price(original_price)
     except Exception as e:
-        print(f"Error extracting original price: {e}")  # Print error message
+        print(f"Error extracting original price: {e}")
 
-    # Try extracting discount information
     try:
         discount = driver.find_element(
             By.XPATH, '//*[@id="corePriceDisplay_desktop_feature_div"]/div[1]/span[2]'
         )
-        full_rating_text = discount.get_attribute("innerHTML").strip()  # Get discount text
-        if " out of 5 stars" in full_rating_text.lower():  # Check if it's a rating instead
-            product_data["rating"] = full_rating_text.lower().split(" out of")[0].strip()  # Extract rating
+        full_rating_text = discount.get_attribute("innerHTML").strip()
+        if " out of 5 stars" in full_rating_text.lower():
+            product_data["rating"] = full_rating_text.lower().split(" out of")[0].strip()
         else:
-            product_data["discount"] = full_rating_text  # Store discount
+            product_data["discount"] = full_rating_text
     except Exception as e:
-        print(f"Error extracting discount: {e}")  # Print error message
+        print(f"Error extracting discount: {e}")
 
-    # Try extracting rating
     try:
-        rating_elem = driver.find_element(By.CLASS_NAME, "a-icon-star")  # Locate rating element
-        product_data["rating"] = rating_elem.get_attribute("innerText").strip()  # Extract rating text
+        rating_elem = driver.find_element(By.CLASS_NAME, "a-icon-star")
+        product_data["rating"] = rating_elem.get_attribute("innerText").strip()
     except Exception as e:
-        print(f"Error extracting rating: {e}")  # Print error message
-
-    # Try extracting customer reviews
+        print(f"Error extracting rating: {e}")
     try:
         reviews_link_elements = driver.find_elements(
             By.XPATH, "//a[contains(text(), 'See customer reviews')]"
         )
         if reviews_link_elements:
-            reviews_link = reviews_link_elements[-1].get_attribute("href")  # Get reviews page link
-            driver.get(reviews_link)  # Navigate to reviews page
-            time.sleep(3)  # Wait for page to load
+            reviews_link = reviews_link_elements[-1].get_attribute("href")
+            driver.get(reviews_link)
+            time.sleep(3)
 
-            reviews_section = driver.find_element(By.ID, "cm-cr-dp-review-list")  # Locate review section
-            review_elements = reviews_section.find_elements(By.TAG_NAME, "li")  # Find all reviews
+            reviews_section = driver.find_element(By.ID, "cm-cr-dp-review-list")
+            review_elements = reviews_section.find_elements(By.TAG_NAME, "li")
 
             for review in review_elements:
-                product_data["reviews"].append(review.text.strip())  # Add review text to list
+                product_data["reviews"].append(review.text.strip())
         else:
-            print("No customer reviews found.")  # Print message if no reviews found
+            print("No customer reviews found.")
     except Exception as e:
-        print(f"Error extracting reviews: {e}")  # Print error message
+        print(f"Error extracting reviews: {e}")
+    driver.quit()
+    return product_data
 
-    driver.quit()  # Close the browser
-    return product_data  # Return collected product data
 
-import re  # Import regex module for text processing
+import re
 
-# Function to extract numerical price from text
+
 def extract_price(price_text):
     """Extracts and converts price from a string with currency symbols or commas."""
-    price_text = re.sub(r"[^\d]", "", price_text)  # Remove non-numeric characters
-    return int(price_text) if price_text else 0  # Convert to integer, return 0 if empty
+    price_text = re.sub(r"[^\d]", "", price_text)  # Remove ₹, commas, and other symbols
+    return int(price_text) if price_text else 0
 
-# Function to extract rating from review text
+
 def extract_rating_from_review(review_text):
-    match = re.search(r"(\d+\.\d+) out of 5 stars", review_text)  # Search for rating pattern
+    match = re.search(r"(\d+\.\d+) out of 5 stars", review_text)
     if match:
-        return float(match.group(1))  # Convert matched rating to float
-    return None  # Return None if no match
+        return float(match.group(1))
+    return None
 
-# Iterate over product links and scrape data
+
 for product_name, link in links.items():
-    product_data = scrape_product_data(link)  # Scrape data for each product
+    product_data = scrape_product_data(link)
 
-    # Try loading existing reviews CSV file
+    # Update reviews.csv
     try:
-        reviews_df = pd.read_csv("reviews.csv")  # Read reviews CSV file
+        reviews_df = pd.read_csv("reviews.csv")
     except FileNotFoundError:
-        reviews_df = pd.DataFrame(columns=["product_name", "review", "rating", "date"])  # Create empty DataFrame if file is missing
+        reviews_df = pd.DataFrame(columns=["product_name", "review", "rating", "date"])
 
-    new_reviews = []  # Initialize a list to store new review entries
-    for review_text in product_data["reviews"]:  # Iterate over scraped reviews
-        rating = extract_rating_from_review(review_text)  # Extract rating from review text
-        new_reviews.append({  # Append extracted review data to the list
-            "product_name": product_name,  # Store product name
-            "review": review_text,  # Store review text
-            "rating": rating,  # Store extracted rating
-            "date": datetime.now().strftime("%Y-%m-%d")  # Store current date
+    new_reviews = []
+    for review_text in product_data["reviews"]:
+        rating = extract_rating_from_review(review_text)
+        new_reviews.append({
+            "product_name": product_name,
+            "review": review_text,
+            "rating": rating,
+            "date": datetime.now().strftime("%Y-%m-%d")
         })
 
-    new_reviews_df = pd.DataFrame(new_reviews)  # Convert new reviews list to DataFrame
-    reviews_df = pd.concat([reviews_df, new_reviews_df], ignore_index=True)  # Merge new reviews with existing ones
-    reviews_df.to_csv("reviews.csv", index=False)  # Save updated reviews to CSV file
+    new_reviews_df = pd.DataFrame(new_reviews)
+    reviews_df = pd.concat([reviews_df, new_reviews_df], ignore_index=True)
+    reviews_df.to_csv("reviews.csv", index=False)
 
-    # Try loading competitor data CSV file
+    # Update competitor_data.csv
+    # try:
+    #     competitor_df = pd.read_csv("competitor_data.csv")
+    # except FileNotFoundError:
+    #     competitor_df = pd.DataFrame(columns=["product_name", "price", "discount", "date"])
+
+    # new_data = {
+    #     "product_name": product_name,
+    #     "price": product_data["selling price"],
+    #     "discount": product_data["discount"],
+    #     "date": datetime.now().strftime("%Y-%m-%d")
+    # }
+
+    # new_data_df = pd.DataFrame([new_data])
+    # competitor_df = pd.concat([competitor_df, new_data_df], ignore_index=True)
+    # competitor_df.to_csv("competitor_data.csv", index=False)
     try:
-        competitor_df = pd.read_csv("competitor_data.csv")  # Read competitor data CSV
-        competitor_df = competitor_df[['product_name', 'price', 'discount', 'date']]  # Ensure only required columns exist
-    except FileNotFoundError:
-        competitor_df = pd.DataFrame(columns=["product_name", "price", "discount", "date"])  # Create empty DataFrame if file is missing
+        competitor_df = pd.read_csv("competitor_data.csv")
 
-    # Create new data entry for competitor data
+        # Drop extra columns if they exist
+        competitor_df = competitor_df[['product_name', 'price', 'discount', 'date']]
+    except FileNotFoundError:
+        competitor_df = pd.DataFrame(columns=["product_name", "price", "discount", "date"])
+
+    # Create new data entry
     new_data = {
-        "product_name": product_name,  # Store product name
-        "price": product_data["selling price"],  # Store selling price
-        "discount": product_data["discount"],  # Store discount
-        "date": datetime.now().strftime("%Y-%m-%d"),  # Store current date
+        "product_name": product_name,
+        "price": product_data["selling price"],
+        "discount": product_data["discount"],
+        "date": datetime.now().strftime("%Y-%m-%d"),
     }
 
-    new_data_df = pd.DataFrame([new_data], columns=["product_name", "price", "discount", "date"])  # Convert data to DataFrame
+    #  Convert to DataFrame and ensure column alignment
+    new_data_df = pd.DataFrame([new_data], columns=["product_name", "price", "discount", "date"])
 
-    competitor_df = pd.concat([competitor_df, new_data_df], ignore_index=True)  # Append new data to existing data
-    competitor_df.to_csv("competitor_data.csv", index=False)  # Save updated competitor data to CSV file
+    # Append data correctly
+    competitor_df = pd.concat([competitor_df, new_data_df], ignore_index=True)
+
+    # Save without extra columns
+    competitor_df.to_csv("competitor_data.csv", index=False)
 
 # API keys
-'''
-This is an API key used to authenticate requests to a service or platform. 
-In this case, the key is for the Groq API (likely used for AI or machine learning tasks).
-API keys are used to validate that the request comes from a trusted source and often grant access to 
-specific functionalities or data within an API.
-The key provided is likely part of a larger system that facilitates secure communication with Groq's servers 
-for performing tasks such as generating recommendations or interacting with their models.
-'''
-'''This is a Slack webhook URL. A webhook in Slack is a way for external systems to send messages into a Slack channel automatically.
-In this case, the webhook URL is specific to a particular Slack workspace and channel, 
-allowing the program to send notifications or updates directly into that Slack channel. 
-The webhook URL is like an endpoint where messages are posted from an external source, 
-and it is set up to trigger when you make an HTTP request to it.'''
-
 API_KEY = "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"  # Groq API Key
-SLACK_WEBHOOK = "https://hooks.slack.com/services/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"  # Slack webhook URL
-
+SLACK_WEBHOOK = "https://hooks.slack.com/services/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"  # Slack webhook URL
 # Streamlit app setup
-st.set_page_config(layout="wide")  # Set Streamlit page layout to wide mode
-
-# Create two columns for layout
+st.set_page_config(layout="wide")
+# Create two columns
 col1, col2 = st.columns(2)
 
-# Add title to the first column
+# Add content to the first column
 with col1:
     st.markdown(
         """
@@ -220,7 +221,7 @@ with col1:
             ❄️❄️❄️<strong>E-Commerce Competitor Strategy Dashboard</strong>❄️❄️❄️
         </div>
         """,
-        unsafe_allow_html=True,  # Allow HTML formatting
+        unsafe_allow_html=True,
     )
 
 # Add GIF to the second column
@@ -231,49 +232,53 @@ with col2:
             <img src="https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExbzh4dXpuc2hpY3JlNnR1MDdiMXozMXlreHFoZjl0a2g5anJqNWxtMCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/hWe6YajFuxX41eV8I0/giphy.gif" alt="Engaging GIF" width="300">
         </div>
         """,
-        unsafe_allow_html=True,  # Allow HTML formatting
+        unsafe_allow_html=True,
     )
+
 
 # Utility function to truncate text
 def truncate_text(text, max_length=512):
-    """Truncate text to a maximum length."""
-    return text[:max_length]  # Return truncated text if it exceeds max_length
+    return text[:max_length]
 
-# Load competitor data from CSV file
+
+# Load competitor data
 def load_competitor_data():
     """Load competitor data from a CSV file."""
-    data = pd.read_csv("competitor_data.csv")  # Read competitor data from CSV
-    st.write(data.head())  # Display first few rows for debugging
-    return data  # Return loaded data
+    data = pd.read_csv("competitor_data.csv")
+    st.write(data.head())  # Display data for debugging
+    return data
 
-# Load reviews data from CSV file
+
+# Load reviews data
 def load_reviews_data():
     """Load reviews data from a CSV file."""
-    reviews = pd.read_csv("reviews.csv")  # Read reviews data from CSV
-    return reviews  # Return loaded reviews
+    reviews = pd.read_csv("reviews.csv")
+    return reviews
 
-# Analyze customer sentiment using Hugging Face transformers
+
+# Analyze customer sentiment
 def analyze_sentiment(reviews):
     """Analyze customer sentiment for reviews."""
-    sentiment_pipeline = pipeline("sentiment-analysis")  # Load sentiment analysis pipeline
-    return sentiment_pipeline(reviews)  # Perform sentiment analysis on reviews
+    sentiment_pipeline = pipeline("sentiment-analysis")
+    return sentiment_pipeline(reviews)
 
-# Train predictive model using RandomForestRegressor
+
+# Train predictive model
 def train_predictive_model(data):
     """Train a predictive model for competitor pricing strategy."""
-    data["Discount"] = data["Discount"].str.replace("%", "").astype(float)  # Convert discount to numeric format
-    data["Price"] = data["Price"].astype(float)  # Ensure price is numeric
-    data["Predicted_Discount"] = data["Discount"] + (data["Price"] * 0.05).round(2)  # Compute predicted discount
+    data["Discount"] = data["Discount"].str.replace("%", "").astype(float)
+    data["Price"] = data["Price"].astype(float)
+    data["Predicted_Discount"] = data["Discount"] + (data["Price"] * 0.05).round(2)
 
-    X = data[["Price", "Discount"]]  # Features: Price and Discount
-    y = data["Predicted_Discount"]  # Target: Predicted discount
+    X = data[["Price", "Discount"]]
+    y = data["Predicted_Discount"]
 
-    # Split data into training and test sets (80% train, 20% test)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    model = RandomForestRegressor(random_state=42)  # Initialize Random Forest Regressor
-    model.fit(X_train, y_train)  # Train the model
-    return model  # Return trained model
+    model = RandomForestRegressor(random_state=42)
+    model.fit(X_train, y_train)
+    return model
+
 
 # Forecast discounts using ARIMA
 def forecast_discounts_arima(data, future_days=5):
@@ -283,88 +288,48 @@ def forecast_discounts_arima(data, future_days=5):
     :param future_days: Number of days to forecast.
     :return: DataFrame with historical and forecasted discounts.
     """
-
-    # Sort the data by the index (date) to ensure it's in chronological order
     data = data.sort_index()
-
-    # Convert the 'discount' column to numeric values, coercing any errors to NaN
     data["discount"] = pd.to_numeric(data["discount"], errors="coerce")
-
-    # Drop rows with NaN values in the 'discount' column
     data = data.dropna(subset=["discount"])
 
-    # Extract the 'discount' column as a time series
     discount_series = data["discount"]
 
-    # Ensure that the index is a datetime index
     if not isinstance(data.index, pd.DatetimeIndex):
         try:
-            # Try converting the index to a datetime index if it's not already
             data.index = pd.to_datetime(data.index)
         except Exception as e:
-            # Raise an error if the conversion fails
             raise ValueError("Index must be datetime or convertible to datetime.") from e
 
-    # Create an ARIMA model with the specified order (p=5, d=1, q=0)
     model = ARIMA(discount_series, order=(5, 1, 0))
-
-    # Fit the ARIMA model to the historical discount data
     model_fit = model.fit()
 
-    # Generate a forecast for the next 'future_days' days
     forecast = model_fit.forecast(steps=future_days)
-
-    # Create a date range for the forecasted days, starting from the last known date + 1 day
     future_dates = pd.date_range(
         start=discount_series.index[-1] + pd.Timedelta(days=1),
-        periods=future_days  # Generate forecasted periods based on 'future_days'
+        periods=future_days
     )
 
-    # Create a DataFrame with the forecasted dates and predicted discounts
     forecast_df = pd.DataFrame({"Date": future_dates, "Predicted_Discount": forecast})
-
-    # Set the 'Date' column as the index of the DataFrame
     forecast_df.set_index("Date", inplace=True)
-
-    # Return the DataFrame containing the forecasted values
     return forecast_df
 
 
 # Send notifications to Slack
 def send_to_slack(data):
-    """
-    Send data (text message) as a Slack notification.
-    :param data: The message content to be sent to Slack.
-    """
-    # Create a dictionary with the text message to send to Slack
     payload = {"text": data}
-
-    # Send the message to Slack using an HTTP POST request
     response = requests.post(
-        SLACK_WEBHOOK,  # The webhook URL for Slack
-        data=json.dumps(payload),  # Convert the payload dictionary to JSON format
-        headers={"Content-Type": "application/json"}  # Set the content type as JSON
+        SLACK_WEBHOOK,
+        data=json.dumps(payload),
+        headers={"Content-Type": "application/json"}
     )
-
-    # Check if the response status code is not 200 (indicating a failure)
     if response.status_code != 200:
-        # Display an error message in the Streamlit app if the request fails
         st.write(f"Failed to send notification to Slack: {response.status_code}")
 
 
-# Generate strategy recommendations using an LLM (Large Language Model)
+# Generate strategy recommendations using an LLM
 def generate_strategy_recommendation(product_name, competitor_data, sentiment):
-    """
-    Generate strategic recommendations using an LLM.
-    :param product_name: The name of the product being analyzed.
-    :param competitor_data: Data about competitors' prices and discounts.
-    :param sentiment: Sentiment analysis results for customer reviews.
-    :return: A string containing the strategic recommendations.
-    """
-    # Get the current date for the prompt
+    """Generate strategic recommendations using an LLM."""
     date = datetime.now()
-
-    # Create a prompt to generate business strategies using the product name, competitor data, and sentiment
     prompt = f"""
     You are a highly skilled business strategist specializing in e-commerce. Based on the following details, suggest actionable strategies:
 
@@ -386,115 +351,82 @@ def generate_strategy_recommendation(product_name, competitor_data, sentiment):
     - **Customer Satisfaction Recommendations**
     """
 
-    # Prepare the request data to send to the LLM API
     data = {
-        "messages": [{"role": "user", "content": prompt}],  # Send the prompt as a user message
-        "model": "llama3-8b-8192",  # Specify the model to use
-        "temperature": 0,  # Set the model's creativity level (0 for deterministic responses)
+        "messages": [{"role": "user", "content": prompt}],
+        "model": "llama3-8b-8192",
+        "temperature": 0,
     }
 
-    # Set the headers for the API request, including the authorization token
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"}
-
-    # Send the request to the LLM API to generate recommendations
     res = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",  # The API endpoint for LLM completions
-        data=json.dumps(data),  # Convert the request data to JSON format
-        headers=headers,  # Include the headers with the API key
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=json.dumps(data),
+        headers=headers,
     )
-
-    # Parse the response JSON and extract the generated content
     res = res.json()
     response = res["choices"][0]["message"]["content"]
-
-    # Return the strategic recommendations generated by the model
     return response
 
 
-# Streamlit UI Section
+# Streamlit UI
 
-# Sidebar header to guide the user to select a product
 st.sidebar.header("❄️Select a Product❄️")
 
 
-# Function to retrieve the list of products from the competitor data CSV file
 def get_product_list():
     try:
-        # Read competitor data from a CSV file
         competitor_df = pd.read_csv("competitor_data.csv")
-        # Return a list of unique product names
         return competitor_df["product_name"].drop_duplicates().tolist()
     except FileNotFoundError:
-        # If the CSV file is not found, return an empty list
         return []
 
 
-# Get the list of products to display in the Streamlit sidebar
 products = get_product_list()
 
-# Create a dropdown in the sidebar to allow the user to select a product
 selected_product = st.sidebar.selectbox("Choose a product to analyze:", products)
 
-# Load competitor and review data
 competitor_data = load_competitor_data()
 reviews_data = load_reviews_data()
 
-# Filter the competitor data to get the data for the selected product
 product_data = competitor_data[competitor_data["product_name"] == selected_product]
-
-# Filter the review data to get the reviews for the selected product
 product_reviews = reviews_data[reviews_data["product_name"] == selected_product]
 
-# Display the competitor analysis heading and the table with the last 5 rows of competitor data
 st.header(f"Competitor Analysis for {selected_product}")
 st.subheader("Competitor Data")
 st.table(product_data.tail(5))
 
-# If product reviews exist, process the reviews and display sentiment analysis
 if not product_reviews.empty:
-    # Truncate reviews to 512 characters
     product_reviews.loc[:, "review"] = product_reviews["review"].apply(lambda x: truncate_text(x, 512))
 
-    # Convert the reviews to a list and perform sentiment analysis
     reviews = product_reviews["review"].tolist()
     sentiments = analyze_sentiment(reviews)
 
-    # Display sentiment analysis results as a bar chart
     st.subheader("Customer Sentiment Analysis")
     sentiment_df = pd.DataFrame(sentiments)
     fig = px.bar(sentiment_df, x="label", title="Sentiment Analysis Results")
     st.plotly_chart(fig)
 else:
-    # If there are no reviews, display a message
     st.write("No reviews available for this product.")
 
-# Convert the 'date' column to datetime format and handle missing values
 product_data["date"] = pd.to_datetime(product_data["date"], errors="coerce")
-
-# Set the index of the product data to a range of dates starting from the minimum date
+# product_data = product_data.dropna(subset=["Date"])
 product_data.index = pd.date_range(start=product_data.index.min(), periods=len(product_data), freq="D")
-
-# Convert the 'discount' column to numeric values and drop rows with NaN values in this column
 product_data["discount"] = pd.to_numeric(product_data["discount"], errors="coerce")
 product_data = product_data.dropna(subset=["discount"])
 
-# Apply the ARIMA forecasting model to predict future discounts
+# Forecasting Model
 product_data_with_predictions = forecast_discounts_arima(product_data)
 
-# Display the predicted discounts in the Streamlit app
 st.subheader("Competitor Current and Predicted Discounts")
 st.table(product_data_with_predictions[["Predicted_Discount"]].tail(10))
 
-# Generate strategic recommendations for the selected product based on competitor data and sentiment
 recommendations = generate_strategy_recommendation(
     selected_product,
     product_data_with_predictions,
     sentiments if not product_reviews.empty else "No reviews available",
 )
 
-# Display the strategic recommendations
 st.subheader("Strategic Recommendations")
 st.write(recommendations)
 
-# Send the strategic recommendations to Slack for further action
 send_to_slack(recommendations)
