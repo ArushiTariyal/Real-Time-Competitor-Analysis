@@ -1,256 +1,307 @@
-import streamlit as st  # Streamlit library for creating web apps
-import pandas as pd  # Pandas library for data manipulation and analysis
-import numpy as np  # NumPy library for numerical computations
-import plotly.express as px  # Plotly Express for creating interactive visualizations
-import plotly.graph_objects as go  # Plotly Graph Objects for more complex visualizations
-from datetime import datetime, timedelta  # Datetime and timedelta for handling dates and times
-from sklearn.ensemble import RandomForestRegressor  # Random Forest Regressor for machine learning
+# Import necessary libraries
+import streamlit as st  # For creating the web app interface
+import pandas as pd  # For data manipulation and analysis
+import numpy as np  # For numerical computations
+import plotly.express as px  # For creating interactive visualizations
+import plotly.graph_objects as go  # For advanced custom visualizations
+from datetime import datetime, timedelta  # For handling date and time
+from sklearn.ensemble import RandomForestRegressor  # For training a Random Forest model
 from sklearn.model_selection import train_test_split  # For splitting data into training and testing sets
-from statsmodels.tsa.arima.model import ARIMA  # ARIMA model for time series forecasting
-import json  # JSON library for handling JSON data
-import requests  # Requests library for making HTTP requests
+from statsmodels.tsa.arima.model import ARIMA  # For time series forecasting using ARIMA
+import json  # For handling JSON data
+import requests  # For making HTTP requests
 
-# Page configuration for the Streamlit app
+# Configure the Streamlit page settings
 st.set_page_config(
     page_title="Realtime Competitor Strategy AI",  # Title of the web app
     page_icon="📊",  # Icon for the web app
-    layout="wide"  # Layout set to wide for better use of screen space
+    layout="wide"  # Use a wide layout for better use of screen space
 )
 
-# Custom CSS to style the app
+# Add custom CSS to style the web app
 st.markdown("""
     <style>
     .main {
-        padding: 0rem 1rem;
+        padding: 0rem 1rem;  # Add padding to the main content area
     }
     .stPlotlyChart {
-        background-color: #ffffff;
-        border-radius: 5px;
-        padding: 1rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        background-color: #ffffff;  # Set background color for Plotly charts
+        border-radius: 5px;  # Add rounded corners to the charts
+        padding: 1rem;  # Add padding around the charts
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);  # Add a subtle shadow to the charts
     }
     </style>
-""", unsafe_allow_html=True)  # Inline CSS to style the app
+""", unsafe_allow_html=True)  # Allow HTML in the markdown for custom styling
 
-# Load data from CSV files
-@st.cache_data(ttl=3600)  # Cache data for 1 hour to improve performance
+
+# Function to load data with caching to improve performance
+@st.cache_data(ttl=3600)  # Cache the data for 1 hour (3600 seconds)
 def load_data():
-    competitor_data = pd.read_csv("competitor_data.csv")  # Load competitor data from CSV
-    competitor_data['Date'] = pd.to_datetime(competitor_data['Date'])  # Convert 'Date' column to datetime
-    reviews_data = pd.read_csv("reviews.csv")  # Load reviews data from CSV
-    reviews_data['date'] = pd.to_datetime(reviews_data['date'])  # Convert 'date' column to datetime
-    return competitor_data, reviews_data  # Return both datasets
+    # Load competitor data from a CSV file and parse the 'date' column as datetime
+    competitor_data = pd.read_csv("competitor_data.csv")
+    competitor_data['date'] = pd.to_datetime(competitor_data['date'])
 
+    # Load reviews data from a CSV file and parse the 'date' column as datetime
+    reviews_data = pd.read_csv("reviews.csv")
+    reviews_data['date'] = pd.to_datetime(reviews_data['date'])
+
+    # Return the loaded data
+    return competitor_data, reviews_data
+
+
+# Mock sentiment analysis function (placeholder for actual sentiment analysis)
 def mock_sentiment_analysis(reviews):
     """Mock sentiment analysis function to replace transformers."""
-    # Simulate sentiment analysis by returning a DataFrame with positive sentiment for all reviews
+    # Create a DataFrame with mock sentiment analysis results
+    # Assumes all reviews are positive for testing purposes
     return pd.DataFrame([
         {'label': 'POSITIVE', 'score': 0.99} for _ in reviews
     ])
 
-def train_price_predictor(data):
-    """Train a Random Forest model for price prediction."""
-    # Features: Price and Discount
-    X = data[['Price', 'Discount']]  # Select features for the model
-    # Target: Next day's price (shifted by -1)
-    y = data['Price'].shift(-1)  # Shift the price column to predict the next day's price
-    y = y.fillna(method='ffill')  # Fill NaN values with the last known value
 
-    # Split data into training and testing sets
+# Function to train a Random Forest model for price prediction
+def train_price_predictor(data):
+    """Train Random Forest model for price prediction."""
+    # Define features (X) and target (y) for the model
+    X = data[['Price', 'Discount']]  # Features: Price and Discount
+    y = data['Price'].shift(-1)  # Target: Next day's price (shifted by -1)
+    y = y.fillna(method='ffill')  # Fill any NaN values in the target with the last valid value
+
+    # Split the data into training and testing sets
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42  # 80% training, 20% testing, random state for reproducibility
+        X, y, test_size=0.2, random_state=42  # 80% training, 20% testing, fixed random state for reproducibility
     )
 
-    # Train a Random Forest Regressor model
-    model = RandomForestRegressor(n_estimators=100, random_state=42)  # Initialize the model
-    model.fit(X_train, y_train)  # Train the model
-    return model  # Return the trained model
+    # Initialize and train the Random Forest model
+    model = RandomForestRegressor(n_estimators=100, random_state=42)  # 100 trees in the forest
+    model.fit(X_train, y_train)  # Train the model on the training data
+
+    # Return the trained model
+    return model
+
+
+# Function to forecast discounts using ARIMA (commented out for now)
+# def forecast_discounts(data, days=7):
+#     """Forecast discounts using ARIMA."""
+#     # Ensure the data has a datetime index
+#     if not isinstance(data.index, pd.DatetimeIndex):
+#         data = data.set_index('date')
+
+#     # Initialize and fit the ARIMA model
+#     model = ARIMA(data['discount'], order=(5,1,0))  # ARIMA model with order (5,1,0)
+#     model_fit = model.fit()  # Fit the model to the data
+
+#     # Forecast discounts for the specified number of days
+#     forecast = model_fit.forecast(steps=days)
+
+#     # Generate future dates for the forecast period
+#     future_dates = pd.date_range(
+#         start=data.index[-1] + pd.Timedelta(days=1),  # Start from the day after the last date in the data
+#         periods=days  # Number of days to forecast
+#     )
+
+#     # Return the forecasted discounts with corresponding dates
+#     return pd.DataFrame({
+#         'Date': future_dates,
+#         'Predicted_Discount': forecast
+#     })
 
 def forecast_discounts(data, days=7):
     """Forecast discounts using ARIMA."""
-    # Ensure the data has a datetime index
+    
     if not isinstance(data.index, pd.DatetimeIndex):
-        data = data.set_index('Date')  # Set 'Date' as the index if not already
+        data = data.set_index('date')
 
-    # Fit an ARIMA model to the discount data
-    model = ARIMA(data['Discount'], order=(5, 1, 0))  # ARIMA(5,1,0) model
-    model_fit = model.fit()  # Fit the model to the data
+    # Ensure discount column is numeric
+    data['discount'] = pd.to_numeric(data['discount'], errors='coerce')
+    data = data.dropna(subset=['discount'])  # Remove NaN values
+    
+    # Ensure enough data points
+    if len(data) < 5:
+        raise ValueError("Not enough data points for ARIMA forecasting.")
 
-    # Forecast discounts for the next `days` days
-    forecast = model_fit.forecast(steps=days)  # Generate forecast
-    # Generate future dates for the forecast
+    # Ensure non-constant discount values
+    if data['discount'].std() == 0:
+        raise ValueError("Constant discount values cannot be used for ARIMA.")
+
+    # Set explicit date frequency
+    try:
+        data = data.asfreq(pd.infer_freq(data.index))
+    except:
+        data = data.asfreq('D')  # Force daily frequency
+
+    # Fit ARIMA
+    model = ARIMA(data['discount'], order=(1,0,0))
+    model_fit = model.fit()
+
+    # Forecast
+    forecast = model_fit.forecast(steps=days)
     future_dates = pd.date_range(
-        start=data.index[-1] + pd.Timedelta(days=1),  # Start from the day after the last date in the data
-        periods=days  # Number of days to forecast
+        start=data.index[-1] + pd.Timedelta(days=1),
+        periods=days
     )
 
-    # Return the forecasted discounts with corresponding dates
-    return pd.DataFrame({
-        'Date': future_dates,
-        'Predicted_Discount': forecast
-    })
+    return pd.DataFrame({'Date': future_dates, 'Predicted_Discount': forecast})
+
 
 def calculate_market_position(data, product_name):
-    """Calculate market position metrics for a specific product."""
-    # Get the latest data for the selected product
-    product_data = data[data['product_name'] == product_name].iloc[-1]  # Get the last entry for the product
-    # Get the latest data for all products
-    all_products = data[data['Date'] == data['Date'].max()]  # Filter data to the latest date
-
-    # Calculate price and discount percentiles
-    price_percentile = (all_products['Price'] < product_data['Price']).mean() * 100  # Calculate price percentile
-    discount_percentile = (all_products['Discount'] < product_data['Discount']).mean() * 100  # Calculate discount percentile
-
+    """Calculate market position metrics."""
+    product_data = data[data['product_name'] == product_name].iloc[-1]
+    all_products = data[data['date'] == data['date'].max()]
+    
+    price_percentile = (all_products['price'] < product_data['price']).mean() * 100
+    discount_percentile = (all_products['discount'] < product_data['discount']).mean() * 100
+    
     return {
         'price_percentile': price_percentile,
         'discount_percentile': discount_percentile,
-        'price': product_data['Price'],
-        'discount': product_data['Discount']
+        'price': product_data['price'],
+        'discount': product_data['discount']
     }
 
 def generate_recommendations(market_position, sentiment_data, forecast_data):
-    """Generate strategic recommendations based on market position, sentiment, and forecasts."""
-    recommendations = []  # Initialize an empty list for recommendations
-
+    """Generate strategic recommendations."""
+    recommendations = []
+    
     # Price-based recommendations
     if market_position['price_percentile'] > 75:
         recommendations.append("Consider price reduction to improve market position")
     elif market_position['price_percentile'] < 25:
         recommendations.append("Potential opportunity to increase prices")
-
+        
     # Discount-based recommendations
     if market_position['discount_percentile'] < 50:
         recommendations.append("Increase promotional activities to match competitor discounts")
-
+    
     # Sentiment-based recommendations
-    sentiment_counts = sentiment_data['label'].value_counts()  # Count the number of positive and negative sentiments
+    sentiment_counts = sentiment_data['label'].value_counts()
     if 'NEGATIVE' in sentiment_counts and sentiment_counts['NEGATIVE'] > sentiment_counts.get('POSITIVE', 0):
         recommendations.append("Address customer concerns to improve sentiment")
-
-    return recommendations  # Return the list of recommendations
+        
+    return recommendations
 
 # Main Dashboard
 def main():
-    st.title("📊 Realtime Competitor Strategy AI Dashboard")  # Set the title of the dashboard
-
+    st.title("📊 Realtime Competitor Strategy AI Dashboard")
+    
     # Load data
-    competitor_data, reviews_data = load_data()  # Load the data using the load_data function
-
+    competitor_data, reviews_data = load_data()
+    
     # Sidebar filters
-    st.sidebar.header("Filters")  # Add a header to the sidebar
+    st.sidebar.header("Filters")
     selected_product = st.sidebar.selectbox(
-        "Select Product",  # Label for the select box
-        competitor_data['product_name'].unique()  # Unique product names for the dropdown
+        "Select Product",
+        competitor_data['product_name'].unique()
     )
-
+    
     date_range = st.sidebar.date_input(
-        "Date Range",  # Label for the date input
+        "Date Range",
         [
-            competitor_data['Date'].max() - timedelta(days=30),  # Default start date: 30 days before the last date
-            competitor_data['Date'].max()  # Default end date: the last date in the data
+            competitor_data['date'].max() - timedelta(days=30),
+            competitor_data['date'].max()
         ]
     )
-
-    # Filter data based on selected product and date range
+    
+    # Filter data
     filtered_data = competitor_data[
-        (competitor_data['Date'] >= pd.Timestamp(date_range[0])) &  # Filter data from the start date
-        (competitor_data['Date'] <= pd.Timestamp(date_range[1])) &  # Filter data to the end date
-        (competitor_data['product_name'] == selected_product)  # Filter data for the selected product
-        ]
-
-    # Layout: Two columns for visualizations
-    col1, col2 = st.columns(2)  # Create two columns for layout
-
+        (competitor_data['date'] >= pd.Timestamp(date_range[0])) &
+        (competitor_data['date'] <= pd.Timestamp(date_range[1])) &
+        (competitor_data['product_name'] == selected_product)
+    ]
+    
+    # Layout
+    col1, col2 = st.columns(2)
+    
     # Price Trends
     with col1:
-        st.subheader("Price Trends")  # Subheader for the price trends section
+        st.subheader("Price Trends")
         fig_price = px.line(
             filtered_data,
-            x='Date',  # X-axis: Date
-            y='Price',  # Y-axis: Price
-            title='Historical Price Trends'  # Title of the chart
+            x='date',
+            y='price',
+            title='Historical Price Trends'
         )
-        st.plotly_chart(fig_price, use_container_width=True)  # Display the chart
-
+        st.plotly_chart(fig_price, use_container_width=True)
+    
     # Discount Analysis
     with col2:
-        st.subheader("Discount Analysis")  # Subheader for the discount analysis section
+        st.subheader("Discount Analysis")
         fig_discount = px.bar(
             filtered_data,
-            x='Date',  # X-axis: Date
-            y='Discount',  # Y-axis: Discount
-            title='Discount Distribution'  # Title of the chart
+            x='date',
+            y='discount',
+            title='Discount Distribution'
         )
-        st.plotly_chart(fig_discount, use_container_width=True)  # Display the chart
-
-    # Market Position Analysis
-    st.subheader("Market Position Analysis")  # Subheader for the market position analysis section
-    market_position = calculate_market_position(competitor_data, selected_product)  # Calculate market position
-
-    col3, col4, col5 = st.columns(3)  # Create three columns for layout
-
+        st.plotly_chart(fig_discount, use_container_width=True)
+    
+    # Market Position
+    st.subheader("Market Position Analysis")
+    market_position = calculate_market_position(competitor_data, selected_product)
+    
+    col3, col4, col5 = st.columns(3)
+    
     with col3:
         st.metric(
-            "Price Percentile",  # Label for the metric
-            f"{market_position['price_percentile']:.1f}%",  # Value of the metric
-            delta=None  # No delta value
+            "Price Percentile",
+            f"{market_position['price_percentile']:.1f}%",
+            delta=None
         )
-
+    
     with col4:
         st.metric(
-            "Discount Percentile",  # Label for the metric
-            f"{market_position['discount_percentile']:.1f}%",  # Value of the metric
-            delta=None  # No delta value
+            "Discount Percentile",
+            f"{market_position['discount_percentile']:.1f}%",
+            delta=None
         )
-
+    
     with col5:
         st.metric(
-            "Current Price",  # Label for the metric
-            f"₹{market_position['price']:,.2f}",  # Value of the metric
-            delta=f"-{market_position['discount']}%"  # Delta value showing the discount
+            "Current Price",
+            f"₹{market_position['price']:,.2f}",
+            delta=f"-{market_position['discount']}%"
         )
-
-    # Customer Sentiment Analysis
-    st.subheader("Customer Sentiment Analysis")  # Subheader for the sentiment analysis section
-    product_reviews = reviews_data[reviews_data['product_name'] == selected_product]  # Filter reviews for the selected product
-
+    
+    # Sentiment Analysis
+    st.subheader("Customer Sentiment Analysis")
+    product_reviews = reviews_data[reviews_data['product_name'] == selected_product]
+    
     if not product_reviews.empty:
-        sentiments = mock_sentiment_analysis(product_reviews['reviews'].tolist())  # Perform sentiment analysis
+        sentiments = mock_sentiment_analysis(product_reviews['review'].tolist())
         fig_sentiment = px.pie(
             sentiments,
-            names='label',  # Column for pie chart labels
-            title='Sentiment Distribution'  # Title of the chart
+            names='label',
+            title='Sentiment Distribution'
         )
-        st.plotly_chart(fig_sentiment, use_container_width=True)  # Display the chart
-
-    # Price & Discount Forecasting
-    st.subheader("Price & Discount Forecasting")  # Subheader for the forecasting section
-    forecast_data = forecast_discounts(filtered_data)  # Forecast discounts
-
+        st.plotly_chart(fig_sentiment, use_container_width=True)
+    
+    # Forecasting
+    st.subheader("Price & Discount Forecasting")
+    forecast_data = forecast_discounts(filtered_data)
+    
     fig_forecast = go.Figure()
     fig_forecast.add_trace(go.Scatter(
-        x=filtered_data['Date'],  # X-axis: Historical dates
-        y=filtered_data['Discount'],  # Y-axis: Historical discounts
-        name='Historical Discounts'  # Name for the trace
+        x=filtered_data['date'],
+        y=filtered_data['discount'],
+        name='Historical Discounts'
     ))
     fig_forecast.add_trace(go.Scatter(
-        x=forecast_data['Date'],  # X-axis: Forecasted dates
-        y=forecast_data['Predicted_Discount'],  # Y-axis: Forecasted discounts
-        name='Forecasted Discounts',  # Name for the trace
-        line=dict(dash='dash')  # Dashed line for forecasted data
+        x=forecast_data['Date'],
+        y=forecast_data['Predicted_Discount'],
+        name='Forecasted Discounts',
+        line=dict(dash='dash')
     ))
-    st.plotly_chart(fig_forecast, use_container_width=True)  # Display the chart
-
+    st.plotly_chart(fig_forecast, use_container_width=True)
+    
     # Strategic Recommendations
-    st.subheader("Strategic Recommendations")  # Subheader for the recommendations section
+    st.subheader("Strategic Recommendations")
     recommendations = generate_recommendations(
         market_position,
-        sentiments if not product_reviews.empty else pd.DataFrame(),  # Pass sentiment data if available
+        sentiments if not product_reviews.empty else pd.DataFrame(),
         forecast_data
     )
-
-    for i, rec in enumerate(recommendations, 1):  # Loop through recommendations
-        st.write(f"{i}. {rec}")  # Display each recommendation
+    
+    for i, rec in enumerate(recommendations, 1):
+        st.write(f"{i}. {rec}")
 
 if __name__ == "__main__":
-    main()  # Run the main function when the script is executed
+    main()
