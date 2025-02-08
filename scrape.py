@@ -288,7 +288,7 @@ for product_name, link in links.items():
 # API keys and configuration
 API_KEY = "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"
 # This is an API key for accessing the Groq API, which is likely used to interact with a machine learning or AI service.
-SLACK_WEBHOOK = ""
+SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
 # This is a Slack webhook URL, which is used to send automated messages or notifications to a specific Slack channel.
 
 # Streamlit app setup
