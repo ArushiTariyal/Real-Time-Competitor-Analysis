@@ -1,389 +1,261 @@
 # Import necessary libraries
-import json  # For working with JSON data
-import time  # For time-related operations
-from datetime import datetime  # For handling date and time
-import pandas as pd  # For data manipulation and analysis
-import requests  # For making HTTP requests
-import plotly.express as px  # For creating interactive visualizations
-import streamlit as st  # For building web applications
-from selenium import webdriver  # For browser automation
-from selenium.webdriver.chrome.options import Options  # For configuring Chrome options
-from selenium.webdriver.chrome.service import Service  # For managing ChromeDriver service
-from selenium.webdriver.common.by import By  # For locating elements on a webpage
-from selenium.webdriver.support import expected_conditions as EC  # For explicit waits
-from selenium.webdriver.support.wait import WebDriverWait  # For waiting for conditions
-from webdriver_manager.chrome import ChromeDriverManager  # For managing ChromeDriver installation
-import chromedriver_autoinstaller  # For automatically installing ChromeDriver
-from transformers import pipeline  # For using pre-trained NLP models
-from sklearn.ensemble import RandomForestRegressor  # For Random Forest regression
-from sklearn.model_selection import train_test_split  # For splitting datasets into training and testing sets
-from statsmodels.tsa.arima.model import ARIMA  # For ARIMA time series modeling
-from selenium.webdriver.chrome.service import Service  # For managing ChromeDriver service (duplicate import)
-
-# Dictionary containing product names as keys and their Amazon URLs as values
-links = {
-    "Apple iPhone 13 (128GB) - Green": "https://www.amazon.in/Apple-iPhone-13-128GB-Green/dp/B09V4B6K53/ref=sr_1_1_sspa?crid=2XWF6OQBE9MW2&dib=eyJ2IjoiMSJ9.4Amcm6ymShwYf2cUNy6g87ZAmr160niWSMsGfJ6ktkhVvBfKClhwZifyFoyaaxp3p9CgrK4JD0kka6vg2gnarqoOb62duNBPCD13Tp0i69vRDmk4uzfDB-25bgoJNhIMNFEoNjBAjmfxVst_C0QmW8zulZt3XeCwXmXb04f26KHMlZ8v3WYOdj3IywjwNuQ1kRaqWcGGKYG5719prdWaQTuqcco0NBNjnzPCNlPyH_Y.GrzT8mZU2IyaErRyD0CZZeRLmD9_fnsrr95RqbZorhw&dib_tag=se&keywords=iphone&qid=1737998659&sprefix=iphone%2Caps%2C238&sr=8-1-spons&sp_csd=d2lkZ2V0TmFtZT1zcF9hdGY&th=1",
-}
-
-# Import chromedriver_autoinstaller again (duplicate import)
-import chromedriver_autoinstaller
-# Import Selenium webdriver and related modules again (duplicate imports)
+import json
+import time
+from datetime import datetime
+import pandas as pd
+import requests
+import plotly.express as px  
+import streamlit as st
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-
-# Function to initialize and configure the Selenium WebDriver
-def get_driver():
-    # Create an instance of Chrome Options to configure ChromeDriver
-    chrome_options = Options()
-    # Run Chrome in headless mode (no GUI)
-    chrome_options.add_argument("--headless")
-    # Disable the sandbox for security (often used in CI/CD environments)
-    chrome_options.add_argument("--no-sandbox")
-    # Disable shared memory usage to avoid issues in Docker or limited environments
-    chrome_options.add_argument("--disable-dev-shm-usage")
-
-    # Automatically install the ChromeDriver version that matches the installed Chrome version
-    chromedriver_autoinstaller.install()
-
-    # Create a WebDriver instance with the configured options
-    driver = webdriver.Chrome(options=chrome_options)
-    # Return the configured WebDriver instance
-    return driver
-
-# Function to scrape product data from a given Amazon product link
-def scrape_product_data(link):
-    # Initialize the Selenium WebDriver
-    driver = get_driver()
-    # Set the browser window size to 1920x1080 pixels
-    driver.set_window_size(1920, 1080)
-    # Navigate to the provided product link
-    driver.get(link)
-
-    # Dictionary to store scraped product data
-    product_data = {
-        "product_name": "",  # Placeholder for product name
-        "selling price": 0,  # Placeholder for selling price
-        "original price": 0,  # Placeholder for original price
-        "discount": 0,  # Placeholder for discount
-        "rating": 0,  # Placeholder for product rating
-        "reviews": [],  # List to store customer reviews
-        "product_url": link,  # Store the product URL
-        "date": datetime.now().strftime("%Y-%m-%d"),  # Store the current date in YYYY-MM-DD format
-    }
-
-    # Retry mechanism to handle potential errors during scraping
-    retry = 0
-    while retry < 3:  # Retry up to 3 times
-        try:
-            # Take a screenshot of the current page (for debugging purposes)
-            driver.save_screenshot("screenshot.png")
-            # Wait for the presence of an element with the class "a-offscreen" (price element)
-            wait = WebDriverWait(driver, 10)
-            wait.until(EC.presence_of_element_located((By.CLASS_NAME, "a-offscreen")))
-            break  # Exit the retry loop if successful
-        except Exception as e:
-            # Print the error and retry
-            print(f"Retrying... Error: {e}")
-            retry += 1
-            # Reload the page
-            driver.get(link)
-            # Wait for 5 seconds before retrying
-            time.sleep(5)
-
-    # Extract the selling price
-    try:
-        # Locate the selling price element using XPath
-        price_elem = driver.find_element(
-            By.XPATH, '//*[@id="corePriceDisplay_desktop_feature_div"]/div[1]/span[3]/span[2]/span[2]'
-        )
-        # Clean the price text (remove commas) and convert it to an integer
-        product_data["selling price"] = int("".join(price_elem.text.strip().split(",")))
-    except Exception as e:
-        # Print an error message if the selling price cannot be extracted
-        print(f"Error extracting selling price: {e}")
-
-    # Extract the original price
-    try:
-        # Locate the original price element using XPath
-        original_price = driver.find_element(
-            By.XPATH, '//*[@id="corePriceDisplay_desktop_feature_div"]/div[2]/span/span[1]/span[2]/span/span[2]'
-        ).text
-        # Use a helper function (extract_price) to clean and convert the price
-        product_data["original price"] = extract_price(original_price)
-    except Exception as e:
-        # Print an error message if the original price cannot be extracted
-        print(f"Error extracting original price: {e}")
-
-    # Extract the discount or rating (handles both cases)
-    try:
-        # Locate the discount or rating element using XPath
-        discount = driver.find_element(
-            By.XPATH, '//*[@id="corePriceDisplay_desktop_feature_div"]/div[1]/span[2]'
-        )
-        # Get the inner HTML of the element
-        full_rating_text = discount.get_attribute("innerHTML").strip()
-        # Check if the text contains a rating (e.g., "4.5 out of 5 stars")
-        if " out of 5 stars" in full_rating_text.lower():
-            # Extract the rating value
-            product_data["rating"] = full_rating_text.lower().split(" out of")[0].strip()
-        else:
-            # If not a rating, assume it's a discount and store it
-            product_data["discount"] = full_rating_text
-    except Exception as e:
-        # Print an error message if the discount or rating cannot be extracted
-        print(f"Error extracting discount: {e}")
-
-    # Extract the product rating (alternative method)
-    try:
-        # Locate the rating element using its class name
-        rating_elem = driver.find_element(By.CLASS_NAME, "a-icon-star")
-        # Get the inner text of the rating element
-        product_data["rating"] = rating_elem.get_attribute("innerText").strip()
-    except Exception as e:
-        # Print an error message if the rating cannot be extracted
-        print(f"Error extracting rating: {e}")
-
-    # Extract customer reviews
-    try:
-        # Locate all "See customer reviews" links using XPath
-        reviews_link_elements = driver.find_elements(
-            By.XPATH, "//a[contains(text(), 'See customer reviews')]"
-        )
-        if reviews_link_elements:
-            # Get the URL of the last "See customer reviews" link
-            reviews_link = reviews_link_elements[-1].get_attribute("href")
-            # Navigate to the reviews page
-            driver.get(reviews_link)
-            # Wait for 3 seconds to allow the page to load
-            time.sleep(3)
-
-            # Locate the reviews section using its ID
-            reviews_section = driver.find_element(By.ID, "cm-cr-dp-review-list")
-            # Locate all review elements within the reviews section
-            review_elements = reviews_section.find_elements(By.TAG_NAME, "li")
-
-            # Loop through each review element and append its text to the reviews list
-            for review in review_elements:
-                product_data["reviews"].append(review.text.strip())
-        else:
-            # Print a message if no customer reviews are found
-            print("No customer reviews found.")
-    except Exception as e:
-        # Print an error message if the reviews cannot be extracted
-        print(f"Error extracting reviews: {e}")
-
-    # Close the WebDriver
-    driver.quit()
-    # Return the scraped product data
-    return product_data
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
+import chromedriver_autoinstaller
+from transformers import pipeline
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+from statsmodels.tsa.arima.model import ARIMA
+from selenium.webdriver.chrome.service import Service
 
 
-# Import the regular expressions module (used for text manipulation)
+# "Apple iPhone 15 plus (128 GB) - Green":"https://www.amazon.in/Apple-iPhone-15-128-GB/dp/B0CHX6NQMD/ref=sr_1_1_sspa?crid=R1L0YPL2S29X&dib=eyJ2IjoiMSJ9.K566O76AQlK71Xxvu5cZV6_Hh6PF3BvOLMRBFifnIHFjNEjzrchmYVdosmxa1iogCPotME2BHnNsaBwUPDA2-mllBijAs7DW8RhIBLy4p9-0H0cHBLm-DzpOvciArbilkz60vobgyha8ic1eC0P42HzmYEw2QEWf0WVbsaGqIsuzl2ehH7OMUCRl5-NFUKjsOq_LK1mKqs_xuQSCawgxHqQz0FQIkrw9jZUPC_edpSs.BrpZORYmy3n8cv644G8deXyR46aI8g1nFhOltas9NK0&dib_tag=se&keywords=apple+iphone+12+122+gb+green&nsdOptOutParam=true&qid=1739185717&sprefix=apple+iphone+12+122+gb+green+%2Caps%2C238&sr=8-1-spons&sp_csd=d2lkZ2V0TmFtZT1zcF9hdGY&psc=1",
+# "Apple iPhone 15 Plus (128 GB) - Green":"https://www.amazon.in/Apple-iPhone-15-Plus-128/dp/B0CHWZCY43/ref=sr_1_7?crid=265DLKKT3883C&dib=eyJ2IjoiMSJ9.jauChL7kXSWomYIKIMCPMqWDoB5h-9C6cHAj-CJcKnh6YYmEpHxp1ek5oho5l2JwOWGb7xQ_PL6ibNxvQvBwauY4LjNmXf5x-SnPd0MW_6b7Pcn4kBn0Z38ia8bJCLnXlWWSdI7qj8xt5P-SaCwk0IaQXjc-TAELb-6-XS8gqV7MnzsqvZSSr_zDE9gHTV9m4d0393IiBo5-yMoLhT9Yj4pCBh4ckxqmhElb9uoCozc.nwjDCGaTpnVi4lEuAs3LE16EVUC0buN4QasJtEo4D20&dib_tag=se&keywords=apple+iphone+15+128+gb+green&nsdOptOutParam=true&qid=1739185833&sprefix=apple+iphone+15+128+gb+green%2Caps%2C253&sr=8-7",
+# "Apple iPhone 15 Plus (128 GB) - Blue":"https://www.amazon.in/Apple-iPhone-15-Plus-128/dp/B0CHX6X2WW/ref=sr_1_11_sspa?crid=265DLKKT3883C&dib=eyJ2IjoiMSJ9.jauChL7kXSWomYIKIMCPMqWDoB5h-9C6cHAj-CJcKnh6YYmEpHxp1ek5oho5l2JwOWGb7xQ_PL6ibNxvQvBwauY4LjNmXf5x-SnPd0MW_6b7Pcn4kBn0Z38ia8bJCLnXlWWSdI7qj8xt5P-SaCwk0IaQXjc-TAELb-6-XS8gqV7MnzsqvZSSr_zDE9gHTV9m4d0393IiBo5-yMoLhT9Yj4pCBh4ckxqmhElb9uoCozc.nwjDCGaTpnVi4lEuAs3LE16EVUC0buN4QasJtEo4D20&dib_tag=se&keywords=apple%2Biphone%2B15%2B128%2Bgb%2Bgreen&nsdOptOutParam=true&qid=1739185833&sprefix=apple%2Biphone%2B15%2B128%2Bgb%2Bgreen%2Caps%2C253&sr=8-11-spons&sp_csd=d2lkZ2V0TmFtZT1zcF9tdGY&th=1",
+# "Apple iPhone 15 Plus (128 GB) - Black":"https://www.amazon.in/Apple-iPhone-15-Plus-128/dp/B0CHXCR9CX/ref=sr_1_15?crid=265DLKKT3883C&dib=eyJ2IjoiMSJ9.jauChL7kXSWomYIKIMCPMqWDoB5h-9C6cHAj-CJcKnh6YYmEpHxp1ek5oho5l2JwOWGb7xQ_PL6ibNxvQvBwauY4LjNmXf5x-SnPd0MW_6b7Pcn4kBn0Z38ia8bJCLnXlWWSdI7qj8xt5P-SaCwk0IaQXjc-TAELb-6-XS8gqV7MnzsqvZSSr_zDE9gHTV9m4d0393IiBo5-yMoLhT9Yj4pCBh4ckxqmhElb9uoCozc.nwjDCGaTpnVi4lEuAs3LE16EVUC0buN4QasJtEo4D20&dib_tag=se&keywords=apple%2Biphone%2B15%2B128%2Bgb%2Bgreen&nsdOptOutParam=true&qid=1739185833&sprefix=apple%2Biphone%2B15%2B128%2Bgb%2Bgreen%2Caps%2C253&sr=8-15&th=1",
+# "Apple iPhone 15 Plus (128 GB) - Pink":"https://www.amazon.in/Apple-iPhone-15-Plus-128/dp/B0CHWYXK1R/ref=sr_1_16?crid=265DLKKT3883C&dib=eyJ2IjoiMSJ9.jauChL7kXSWomYIKIMCPMqWDoB5h-9C6cHAj-CJcKnh6YYmEpHxp1ek5oho5l2JwOWGb7xQ_PL6ibNxvQvBwauY4LjNmXf5x-SnPd0MW_6b7Pcn4kBn0Z38ia8bJCLnXlWWSdI7qj8xt5P-SaCwk0IaQXjc-TAELb-6-XS8gqV7MnzsqvZSSr_zDE9gHTV9m4d0393IiBo5-yMoLhT9Yj4pCBh4ckxqmhElb9uoCozc.nwjDCGaTpnVi4lEuAs3LE16EVUC0buN4QasJtEo4D20&dib_tag=se&keywords=apple+iphone+15+128+gb+green&nsdOptOutParam=true&qid=1739185833&sprefix=apple+iphone+15+128+gb+green%2Caps%2C253&sr=8-16"
+# "ZEBRONICS THUNDER Bluetooth 5.3 Wireless over Ear Headphones with 60H Backup (Black)":"https://www.amazon.in/ZEBRONICS-Bluetooth-Headphones-assistant-Comfortable/dp/B07L8KNP5F/ref=sr_1_2?crid=1W40G5GRB60WE&dib=eyJ2IjoiMSJ9.0DASzxIE9pACZHbHX81_Jf1FjTpQyWa45-bqicf3mZ4TMWosRZQ9p_cEGpkRH6oLsU5tBTUrYq6eTLSldqlNIlTSmwdzX9wOVEhjjwCQUN7-seiopr4I0_V1_jXlzcC3I8SIrbfg0bJwHjtldileTNN1ESpxrXeVXY1dBm7twB6bt9AkfvPe1IOEC_TY2YchiiaRXmaar0c_3g-SHrcQeZtl1Za3EJH6ZyDaBMTRglxkl78jhYaJ7kfgDf5UiNytJBvVfX4H4ST1QaDoHBD38HfAQ56j6HjN8QsvsWv7XQCPaeZOTt1aZpJlaOg-LJFeKbniBt3k-kIg5WIsD6bYoUQvXmrIX8QlJbQtwaiP7g4.ZP4N7cUoMb50y-y1MZKGI3YlZ21qGpKtuygASlyZ1Ek&dib_tag=se&keywords=headphones&qid=1739188659&refinements=p_123%3A396324&rnid=91049095031&s=electronics&sprefix=headphone%2B%2Caps%2C263&sr=1-2&th=1",
+# "ZEBRONICS Thunder Bluetooth 5.3 Wireless Over Ear Headphones with 60H Backup (Sea Green)":"https://www.amazon.in/ZEBRONICS-Zeb-Thunder-Connectivity-Sea-Green/dp/B09B5CPV71/ref=sr_1_1?crid=1W40G5GRB60WE&dib=eyJ2IjoiMSJ9.0DASzxIE9pACZHbHX81_Jf1FjTpQyWa45-bqicf3mZ4TMWosRZQ9p_cEGpkRH6oLsU5tBTUrYq6eTLSldqlNIlTSmwdzX9wOVEhjjwCQUN7-seiopr4I0_V1_jXlzcC3I8SIrbfg0bJwHjtldileTNN1ESpxrXeVXY1dBm7twB6bt9AkfvPe1IOEC_TY2YchiiaRXmaar0c_3g-SHrcQeZtl1Za3EJH6ZyDaBMTRglxkl78jhYaJ7kfgDf5UiNytJBvVfX4H4ST1QaDoHBD38HfAQ56j6HjN8QsvsWv7XQCPaeZOTt1aZpJlaOg-LJFeKbniBt3k-kIg5WIsD6bYoUQvXmrIX8QlJbQtwaiP7g4.ZP4N7cUoMb50y-y1MZKGI3YlZ21qGpKtuygASlyZ1Ek&dib_tag=se&keywords=headphones&qid=1739188659&refinements=p_123%3A396324&rnid=91049095031&s=electronics&sprefix=headphone%2B%2Caps%2C263&sr=1-1&th=1",
+# "ZEBRONICS Thunder Bluetooth 5.3 Wireless Over Ear Headphones with 60H Backup (Teal Green)":"https://www.amazon.in/ZEBRONICS-Zeb-Thunder-Bluetooth-Teal-Green/dp/B09B5BS6G4/ref=sr_1_4?crid=1Q9Y5CJ3Z2XT3&dib=eyJ2IjoiMSJ9.1AX7wDxY6c1qXJ5gFVFXYOVb6LTEOmUNiVllp1t6aHS9j3cgUfQJ7XcxPpU3vkhFEy7eAEdFjK5gluBIEZWuujnEBaobvTNzyouUwBXaSNs1eZ2uGK1MT6cnUlcolxj7ZR-I8cLecjyFvZF8K1FBcxIqfItdb8Kjq4pTITjUZGlw97ck5iSsggbrJCmU3FiVl8znpHevI6tjycLL7zij9gvdwx8WPeAvuUWgiMPQk0jY3v1JeCW55-sbXP_fJ5-7sIAJ-57YWTnH86W_x3pSneNKs2krw8LYlLmIf72GljKDlKX_73QvtPNYgcg40R4KFUgYFr_fHWU4oUR8Vdfw0Cdpih-6layxGOn4hlIMouc.O48DybnV2ME8jdPP9K7Q-Z9-jzZyi4rHSP8ADatuV24&dib_tag=se&keywords=ZEBRONICS%2BThunder%2BBluetooth%2B5.3%2BWireless%2BOver%2BEar%2BHeadphones%2Bwith%2B60H%2BBackup%2C%2BGaming%2BMode%2C%2BDual%2BPairing%2C%2BEnc%2C%2BAux%2C%2BMicro%2BSd%2C%2BVoice%2BAssistant%2C%2BComfortable%2BEarcups%2C%2BCall%2BFunction&nsdOptOutParam=true&qid=1739188725&s=electronics&sprefix=zebronics%2Bthunder%2Bbluetooth%2B5.3%2Bwireless%2Bover%2Bear%2Bheadphones%2Bwith%2B60h%2Bbackup%2C%2Bgaming%2Bmode%2C%2Bdual%2Bpairing%2C%2Benc%2C%2Baux%2C%2Bmicro%2Bsd%2C%2Bvoice%2Bassistant%2C%2Bcomfortable%2Bearcups%2C%2Bcall%2Bfunction%2Celectronics%2C246&sr=1-4&th=1",
+# "ZEBRONICS Thunder Bluetooth 5.3 Wireless Over Ear Headphones with 60H Backup (Red)":"https://www.amazon.in/ZEBRONICS-Bluetooth-Headphones-Assistant-Comfortable/dp/B07L8LTS3J/ref=sr_1_5?crid=1Q9Y5CJ3Z2XT3&dib=eyJ2IjoiMSJ9.1AX7wDxY6c1qXJ5gFVFXYOVb6LTEOmUNiVllp1t6aHS9j3cgUfQJ7XcxPpU3vkhFEy7eAEdFjK5gluBIEZWuujnEBaobvTNzyouUwBXaSNs1eZ2uGK1MT6cnUlcolxj7ZR-I8cLecjyFvZF8K1FBcxIqfItdb8Kjq4pTITjUZGlw97ck5iSsggbrJCmU3FiVl8znpHevI6tjycLL7zij9gvdwx8WPeAvuUWgiMPQk0jY3v1JeCW55-sbXP_fJ5-7sIAJ-57YWTnH86W_x3pSneNKs2krw8LYlLmIf72GljKDlKX_73QvtPNYgcg40R4KFUgYFr_fHWU4oUR8Vdfw0Cdpih-6layxGOn4hlIMouc.O48DybnV2ME8jdPP9K7Q-Z9-jzZyi4rHSP8ADatuV24&dib_tag=se&keywords=ZEBRONICS%2BThunder%2BBluetooth%2B5.3%2BWireless%2BOver%2BEar%2BHeadphones%2Bwith%2B60H%2BBackup%2C%2BGaming%2BMode%2C%2BDual%2BPairing%2C%2BEnc%2C%2BAux%2C%2BMicro%2BSd%2C%2BVoice%2BAssistant%2C%2BComfortable%2BEarcups%2C%2BCall%2BFunction&nsdOptOutParam=true&qid=1739188725&s=electronics&sprefix=zebronics%2Bthunder%2Bbluetooth%2B5.3%2Bwireless%2Bover%2Bear%2Bheadphones%2Bwith%2B60h%2Bbackup%2C%2Bgaming%2Bmode%2C%2Bdual%2Bpairing%2C%2Benc%2C%2Baux%2C%2Bmicro%2Bsd%2C%2Bvoice%2Bassistant%2C%2Bcomfortable%2Bearcups%2C%2Bcall%2Bfunction%2Celectronics%2C246&sr=1-5&th=1",
+# "ZEBRONICS Thunder Over Ear Bluetooth 5.3 Wireless Headphones with 60H Backup (Blue)":"https://www.amazon.in/ZEBRONICS-Bluetooth-Headphones-Assistant-Comfortable/dp/B07L8JTZ4H/ref=sr_1_6?crid=1Q9Y5CJ3Z2XT3&dib=eyJ2IjoiMSJ9.1AX7wDxY6c1qXJ5gFVFXYOVb6LTEOmUNiVllp1t6aHS9j3cgUfQJ7XcxPpU3vkhFEy7eAEdFjK5gluBIEZWuujnEBaobvTNzyouUwBXaSNs1eZ2uGK1MT6cnUlcolxj7ZR-I8cLecjyFvZF8K1FBcxIqfItdb8Kjq4pTITjUZGlw97ck5iSsggbrJCmU3FiVl8znpHevI6tjycLL7zij9gvdwx8WPeAvuUWgiMPQk0jY3v1JeCW55-sbXP_fJ5-7sIAJ-57YWTnH86W_x3pSneNKs2krw8LYlLmIf72GljKDlKX_73QvtPNYgcg40R4KFUgYFr_fHWU4oUR8Vdfw0Cdpih-6layxGOn4hlIMouc.O48DybnV2ME8jdPP9K7Q-Z9-jzZyi4rHSP8ADatuV24&dib_tag=se&keywords=ZEBRONICS%2BThunder%2BBluetooth%2B5.3%2BWireless%2BOver%2BEar%2BHeadphones%2Bwith%2B60H%2BBackup%2C%2BGaming%2BMode%2C%2BDual%2BPairing%2C%2BEnc%2C%2BAux%2C%2BMicro%2BSd%2C%2BVoice%2BAssistant%2C%2BComfortable%2BEarcups%2C%2BCall%2BFunction&nsdOptOutParam=true&qid=1739188725&s=electronics&sprefix=zebronics%2Bthunder%2Bbluetooth%2B5.3%2Bwireless%2Bover%2Bear%2Bheadphones%2Bwith%2B60h%2Bbackup%2C%2Bgaming%2Bmode%2C%2Bdual%2Bpairing%2C%2Benc%2C%2Baux%2C%2Bmicro%2Bsd%2C%2Bvoice%2Bassistant%2C%2Bcomfortable%2Bearcups%2C%2Bcall%2Bfunction%2Celectronics%2C246&sr=1-6&th=1"   
+# "House of Quirk 1200ML Stainless Steel Tumbler (Green)":"https://www.amazon.in/OCEANEVO-Stainless-Tumbler-Insulated-Leakproof/dp/B0D631YTDT/ref=sr_1_3_sspa?crid=1AGBTKODWN1UX&dib=eyJ2IjoiMSJ9.nrXSdJgz9wxScAo78fS0NHW4KP6taMtjOR8C-G4c9iK-PLEfPeWWJlAC7-9u-JQDgegMjPpACMSphH0p9BvASCftoT4ep0b7RaKjKpHsZW_bWRphKvk21U4O6mOU_LlMUudGnIuFSX6fzh0O9NzVD_7SvG9ZIbg1C4VPrmGmpILNXGT0kvIQ78xrgxp9OqfVrvxbweZ51VL4BoGGexoVhmZIqZXsiQdwpHHIRX_aLQs38H5VhIVCuR-aP4YZ0k4ARVFbAgmFCIxBgsbZDFvopSvRI-3zMg0qpB65DKcCppw.KuH7YLPcTwwSPPwlNo09F89-sI2M5v27oW6sh6svVY8&dib_tag=se&keywords=House%2Bof%2BQuirk%2B1200ML%2BStainless%2BSteel%2BTumbler%2BHot%2Band%2BCold%2Bwith%2BHandle%2Band%2BLid%2B2%2BStraw%2C%2BDouble%2BInsulated%2BCup%2BLeak%2BProof%2BMug%2BCupholder%2Bfor%2BGym%2C%2BTravelling%2B(Oatmeal)&nsdOptOutParam=true&qid=1739190831&sprefix=house%2Bof%2Bquirk%2B1200ml%2Bstainless%2Bsteel%2Btumbler%2Bhot%2Band%2Bcold%2Bwith%2Bhandle%2Band%2Blid%2B2%2Bstraw%2C%2Bdouble%2Binsulated%2Bcup%2Bleak%2Bproof%2Bmug%2Bcupholder%2Bfor%2Bgym%2C%2Btravelling%2Boatmeal%2B%2Caps%2C251&sr=8-3-spons&sp_csd=d2lkZ2V0TmFtZT1zcF9hdGY&smid=A32IMOCB6C4QUT&th=1",
+# "House of Quirk 1200ML Stainless Steel Tumbler (Pink)":"https://www.amazon.in/Rioware%C2%AE-Stainless-Insulated-Cupholder-Travelling/dp/B0D98VXYBJ/ref=sr_1_4_sspa?crid=1AGBTKODWN1UX&dib=eyJ2IjoiMSJ9.nrXSdJgz9wxScAo78fS0NHW4KP6taMtjOR8C-G4c9iK-PLEfPeWWJlAC7-9u-JQDgegMjPpACMSphH0p9BvASCftoT4ep0b7RaKjKpHsZW_bWRphKvk21U4O6mOU_LlMUudGnIuFSX6fzh0O9NzVD_7SvG9ZIbg1C4VPrmGmpILNXGT0kvIQ78xrgxp9OqfVrvxbweZ51VL4BoGGexoVhmZIqZXsiQdwpHHIRX_aLQs38H5VhIVCuR-aP4YZ0k4ARVFbAgmFCIxBgsbZDFvopSvRI-3zMg0qpB65DKcCppw.KuH7YLPcTwwSPPwlNo09F89-sI2M5v27oW6sh6svVY8&dib_tag=se&keywords=House%2Bof%2BQuirk%2B1200ML%2BStainless%2BSteel%2BTumbler%2BHot%2Band%2BCold%2Bwith%2BHandle%2Band%2BLid%2B2%2BStraw%2C%2BDouble%2BInsulated%2BCup%2BLeak%2BProof%2BMug%2BCupholder%2Bfor%2BGym%2C%2BTravelling%2B(Oatmeal)&nsdOptOutParam=true&qid=1739190831&sprefix=house%2Bof%2Bquirk%2B1200ml%2Bstainless%2Bsteel%2Btumbler%2Bhot%2Band%2Bcold%2Bwith%2Bhandle%2Band%2Blid%2B2%2Bstraw%2C%2Bdouble%2Binsulated%2Bcup%2Bleak%2Bproof%2Bmug%2Bcupholder%2Bfor%2Bgym%2C%2Btravelling%2Boatmeal%2B%2Caps%2C251&sr=8-4-spons&sp_csd=d2lkZ2V0TmFtZT1zcF9hdGY&th=1",
+# "House of Quirk 1200ML Stainless Steel Tumbler (Oatmeal)":"https://www.amazon.in/OCEANEVO-Stainless-Tumbler-Insulated-Leakproof/dp/B0D631YTDT/ref=sr_1_3_sspa?crid=1AGBTKODWN1UX&dib=eyJ2IjoiMSJ9.nrXSdJgz9wxScAo78fS0NHW4KP6taMtjOR8C-G4c9iK-PLEfPeWWJlAC7-9u-JQDgegMjPpACMSphH0p9BvASCftoT4ep0b7RaKjKpHsZW_bWRphKvk21U4O6mOU_LlMUudGnIuFSX6fzh0O9NzVD_7SvG9ZIbg1C4VPrmGmpILNXGT0kvIQ78xrgxp9OqfVrvxbweZ51VL4BoGGexoVhmZIqZXsiQdwpHHIRX_aLQs38H5VhIVCuR-aP4YZ0k4ARVFbAgmFCIxBgsbZDFvopSvRI-3zMg0qpB65DKcCppw.KuH7YLPcTwwSPPwlNo09F89-sI2M5v27oW6sh6svVY8&dib_tag=se&keywords=House%2Bof%2BQuirk%2B1200ML%2BStainless%2BSteel%2BTumbler%2BHot%2Band%2BCold%2Bwith%2BHandle%2Band%2BLid%2B2%2BStraw%2C%2BDouble%2BInsulated%2BCup%2BLeak%2BProof%2BMug%2BCupholder%2Bfor%2BGym%2C%2BTravelling%2B(Oatmeal)&nsdOptOutParam=true&qid=1739190831&sprefix=house%2Bof%2Bquirk%2B1200ml%2Bstainless%2Bsteel%2Btumbler%2Bhot%2Band%2Bcold%2Bwith%2Bhandle%2Band%2Blid%2B2%2Bstraw%2C%2Bdouble%2Binsulated%2Bcup%2Bleak%2Bproof%2Bmug%2Bcupholder%2Bfor%2Bgym%2C%2Btravelling%2Boatmeal%2B%2Caps%2C251&sr=8-3-spons&sp_csd=d2lkZ2V0TmFtZT1zcF9hdGY&smid=A32IMOCB6C4QUT&th=1",
+# "House of Quirk 1200ML Stainless Steel Tumbler(Rose Quartz)":"https://www.amazon.in/Leczonio-lid-Insulated-Stainless-Cupholder/dp/B0DBZ5K866/ref=sr_1_2_sspa?crid=1AGBTKODWN1UX&dib=eyJ2IjoiMSJ9.nrXSdJgz9wxScAo78fS0NHW4KP6taMtjOR8C-G4c9iK-PLEfPeWWJlAC7-9u-JQDgegMjPpACMSphH0p9BvASCftoT4ep0b7RaKjKpHsZW_bWRphKvk21U4O6mOU_LlMUudGnIuFSX6fzh0O9NzVD_7SvG9ZIbg1C4VPrmGmpILNXGT0kvIQ78xrgxp9OqfVrvxbweZ51VL4BoGGexoVhmZIqZXsiQdwpHHIRX_aLQs38H5VhIVCuR-aP4YZ0k4ARVFbAgmFCIxBgsbZDFvopSvRI-3zMg0qpB65DKcCppw.KuH7YLPcTwwSPPwlNo09F89-sI2M5v27oW6sh6svVY8&dib_tag=se&keywords=House%2Bof%2BQuirk%2B1200ML%2BStainless%2BSteel%2BTumbler%2BHot%2Band%2BCold%2Bwith%2BHandle%2Band%2BLid%2B2%2BStraw%2C%2BDouble%2BInsulated%2BCup%2BLeak%2BProof%2BMug%2BCupholder%2Bfor%2BGym%2C%2BTravelling%2B(Oatmeal)&nsdOptOutParam=true&qid=1739190831&sprefix=house%2Bof%2Bquirk%2B1200ml%2Bstainless%2Bsteel%2Btumbler%2Bhot%2Band%2Bcold%2Bwith%2Bhandle%2Band%2Blid%2B2%2Bstraw%2C%2Bdouble%2Binsulated%2Bcup%2Bleak%2Bproof%2Bmug%2Bcupholder%2Bfor%2Bgym%2C%2Btravelling%2Boatmeal%2B%2Caps%2C251&sr=8-2-spons&sp_csd=d2lkZ2V0TmFtZT1zcF9hdGY&th=1",
+# "House of Quirk 1200ML Stainless Steel Tumbler (Oatmeal)":"https://www.amazon.in/House-Quirk-Stainless-Insulated-Travelling/dp/B0CQCCLSV8/ref=sr_1_5?crid=1AGBTKODWN1UX&dib=eyJ2IjoiMSJ9.nrXSdJgz9wxScAo78fS0NHW4KP6taMtjOR8C-G4c9iK-PLEfPeWWJlAC7-9u-JQDgegMjPpACMSphH0p9BvASCftoT4ep0b7RaKjKpHsZW_bWRphKvk21U4O6mOU_LlMUudGnIuFSX6fzh0O9NzVD_7SvG9ZIbg1C4VPrmGmpILNXGT0kvIQ78xrgxp9OqfVrvxbweZ51VL4BoGGexoVhmZIqZXsiQdwpHHIRX_aLQs38H5VhIVCuR-aP4YZ0k4ARVFbAgmFCIxBgsbZDFvopeIru8YbLImu9DHhyFQjz0aV4M_F_6MRu0iSmMDNRfNNP-95A20FVnW2w3HLi62y46QYwQIlUVb2mBoodIJCSqdD0E6F7MJHyrGmoBGOYS6fu89WIFrXKkIOA71nWKhtWK4rp2i65wQCIlZxac8c2UL00OI9lqQqrjslSR9clXGO.M_K-tcxngE5f-8W2RIoMfulkd3k1pPGdTs0bgdFlU_8&dib_tag=se&keywords=House%2Bof%2BQuirk%2B1200ML%2BStainless%2BSteel%2BTumbler%2BHot%2Band%2BCold%2Bwith%2BHandle%2Band%2BLid%2B2%2BStraw%2C%2BDouble%2BInsulated%2BCup%2BLeak%2BProof%2BMug%2BCupholder%2Bfor%2BGym%2C%2BTravelling%2B(Oatmeal)&nsdOptOutParam=true&qid=1739190831&sprefix=house%2Bof%2Bquirk%2B1200ml%2Bstainless%2Bsteel%2Btumbler%2Bhot%2Band%2Bcold%2Bwith%2Bhandle%2Band%2Blid%2B2%2Bstraw%2C%2Bdouble%2Binsulated%2Bcup%2Bleak%2Bproof%2Bmug%2Bcupholder%2Bfor%2Bgym%2C%2Btravelling%2Boatmeal%2B%2Caps%2C251&sr=8-5&th=1"
+       
+
+links={"realme 12 Pro 5G (Submarine Blue, 8GB RAM 256 GB Storage)":"https://www.amazon.in/realme-12-5G-Submarine-Storage/dp/B0CTHXNT9W/ref=sr_1_1?crid=2V6YG7XUURBZ3&dib=eyJ2IjoiMSJ9.8VKsCk3uy1UUAaj-veQNvcLMHMRP_a9iRw-2kIB4i4IykY-aPoUjQHYU07-8_gUeYnS698A10gCVmj0PPbeTX6dlNm7xZatDgH3_ZQ5CczXCtNwgYyWf5Z3DDHAFH4zZyU0g_hAmrF5QjNKJbLEt4j83LxVRhhOlLSO1MykY0SrthzRqthvLEqbsABNu6265uSy-j2tPVTZ4E6Kk1XzG86LAqUqpZw6Gs2uPbCKji2o.lFYERbkPYgIw6enGMJLa5VN1kbZacv16I1t4TVUESm4&dib_tag=se&keywords=realme+12+pro+8+gb+256+gb&nsdOptOutParam=true&qid=1739193382&sprefix=realme+12+pro+8+gb+256+gb%2Caps%2C257&sr=8-1",}
+import chromedriver_autoinstaller
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 import re
 
-# Function to extract and clean price from a string containing currency symbols or commas
 def extract_price(price_text):
     """Extracts and converts price from a string with currency symbols or commas."""
-    # Use regex to remove all non-digit characters (e.g., ₹, commas, etc.)
-    price_text = re.sub(r"[^\d]", "", price_text)
-    # Convert the cleaned string to an integer, or return 0 if the string is empty
+    price_text = re.sub(r"[^\d]", "", price_text)  # Remove ₹, commas, and other symbols
     return int(price_text) if price_text else 0
 
 
-# Function to extract the rating from a review text
-def extract_rating_from_review(review_text):
-    # Use regex to search for a pattern like "4.5 out of 5 stars"
-    match = re.search(r"(\d+\.\d+) out of 5 stars", review_text)
-    if match:
-        # If a match is found, extract the rating and convert it to a float
-        return float(match.group(1))
-    # Return None if no rating is found
-    return None
+def get_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    # Automatically install the chromedriver version that matches the chromium version
+    chromedriver_autoinstaller.install()
+
+    # Create the webdriver with the options and use the default path
+    driver = webdriver.Chrome(options=chrome_options)
+    return driver
+
+    
+def scrape_product_data(link):
+    driver = get_driver()
+    driver.set_window_size(1920, 1080)
+    driver.get(link)
+    product_data = {
+        "product_name": "",  # Add product_name to the dictionary
+        "selling price": 0,
+        "original price": 0,
+        "discount": 0,
+        "rating": 0,
+        "review": [],
+        "product_url": link,
+        "date": datetime.now().strftime("%Y-%m-%d"),
+    }
+    retry = 0
+    while retry < 3:
+        try:
+            driver.save_screenshot("screenshot.png")
+            wait = WebDriverWait(driver, 10)
+            wait.until(EC.presence_of_element_located((By.CLASS_NAME, "a-offscreen")))
+            break
+        except Exception as e:
+            print(f"Retrying... Error: {e}")
+            retry += 1
+            driver.get(link)
+            time.sleep(5)
+
+    try:
+        price_elem = driver.find_element(
+            By.XPATH, '//*[@id="corePriceDisplay_desktop_feature_div"]/div[1]/span[3]/span[2]/span[2]'
+        )
+        product_data["selling price"] = int("".join(price_elem.text.strip().split(",")))
+    except Exception as e:
+        print(f"Error extracting selling price: {e}")
+
+    try:
+        original_price = driver.find_element(
+        By.XPATH, '//*[@id="corePriceDisplay_desktop_feature_div"]/div[2]/span/span[1]/span[2]/span/span[2]'
+        ).text
+        product_data["original price"] = extract_price(original_price)
+    except Exception as e:
+        print(f"Error extracting original price: {e}")
 
 
-# Loop through each product name and its corresponding link in the `links` dictionary
+    try:
+        discount = driver.find_element(
+            By.XPATH, '//*[@id="corePriceDisplay_desktop_feature_div"]/div[1]/span[2]'
+        )
+        full_rating_text = discount.get_attribute("innerHTML").strip()
+        if " out of 5 stars" in full_rating_text.lower():
+            product_data["rating"] = full_rating_text.lower().split(" out of")[0].strip()
+        else:
+            product_data["discount"] = full_rating_text
+    except Exception as e:
+        print(f"Error extracting discount: {e}")
+
+    try:
+        rating_elem = driver.find_element(By.XPATH, '//*[@id="acrPopover"]/span[1]/a/span')
+        product_data["rating"] = rating_elem.text.strip()
+        print("Extracted Rating:", product_data["rating"])
+    except Exception as e:
+        print(f"Error extracting rating: {e}")
+    try:
+        # Wait for the review element to appear
+        review_elem = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.XPATH, "//*[@id='product-summary']/p/span"))
+        )
+        product_data["review"].append(review_elem.text.strip())
+        print("Extracted Review:", review_elem.text.strip())
+    except Exception as e:
+        print(f"Error extracting AI-generated review: {e}")
+
+
+    driver.quit()
+    return product_data
+
 for product_name, link in links.items():
-    # Scrape product data using the `scrape_product_data` function
     product_data = scrape_product_data(link)
-
+    
     # Update reviews.csv
     try:
-        # Try to load the existing reviews CSV file into a DataFrame
         reviews_df = pd.read_csv("reviews.csv")
     except FileNotFoundError:
-        # If the file doesn't exist, create a new DataFrame with the specified columns
         reviews_df = pd.DataFrame(columns=["product_name", "review", "rating", "date"])
-
-    # Create a list to store new reviews
-    new_reviews = []
-    # Loop through each review text in the scraped reviews
-    for review_text in product_data["reviews"]:
-        # Extract the rating from the review text
-        rating = extract_rating_from_review(review_text)
-        # Append the review data to the new_reviews list
-        new_reviews.append({
-            "product_name": product_name,  # Product name
-            "review": review_text,  # Review text
-            "rating": rating,  # Extracted rating
-            "date": datetime.now().strftime("%Y-%m-%d")  # Current date
-        })
-
-    # Convert the new_reviews list into a DataFrame
+    
+    new_reviews={
+        "product_name": product_name,
+        "review": product_data["review"],
+        "rating": product_data["rating"],
+        "date": datetime.now().strftime("%Y-%m-%d")
+    }
+    
     new_reviews_df = pd.DataFrame(new_reviews)
-    # Concatenate the existing reviews DataFrame with the new reviews DataFrame
     reviews_df = pd.concat([reviews_df, new_reviews_df], ignore_index=True)
-    # Save the updated DataFrame back to the reviews CSV file
     reviews_df.to_csv("reviews.csv", index=False)
-
-    # Update competitor_data.csv
-    # The following block is commented out, but it shows an alternative approach
-    # try:
-    #     competitor_df = pd.read_csv("competitor_data.csv")
-    # except FileNotFoundError:
-    #     competitor_df = pd.DataFrame(columns=["product_name", "price", "discount", "date"])
-    #
-    # new_data = {
-    #     "product_name": product_name,
-    #     "price": product_data["selling price"],
-    #     "discount": product_data["discount"],
-    #     "date": datetime.now().strftime("%Y-%m-%d")
-    # }
-    #
-    # new_data_df = pd.DataFrame([new_data])
-    # competitor_df = pd.concat([competitor_df, new_data_df], ignore_index=True)
-    # competitor_df.to_csv("competitor_data.csv", index=False)
-
-    # Alternative approach for updating competitor_data.csv
+    
     try:
-        # Try to load the existing competitor data CSV file into a DataFrame
         competitor_df = pd.read_csv("competitor_data.csv")
 
-        # Drop extra columns if they exist, keeping only the specified columns
+        # Drop extra columns if they exist
         competitor_df = competitor_df[['product_name', 'price', 'discount', 'date']]
     except FileNotFoundError:
-        # If the file doesn't exist, create a new DataFrame with the specified columns
         competitor_df = pd.DataFrame(columns=["product_name", "price", "discount", "date"])
 
-    # Create a new data entry for the current product
+    # Create new data entry
     new_data = {
-        "product_name": product_name,  # Product name
-        "price": product_data["selling price"],  # Selling price
-        "discount": product_data["discount"],  # Discount
-        "date": datetime.now().strftime("%Y-%m-%d"),  # Current date
+        "product_name": product_name,
+        "price": product_data["selling price"],
+        "discount": product_data["discount"],
+        "date": datetime.now().strftime("%Y-%m-%d"),
     }
 
-    # Convert the new_data dictionary into a DataFrame
-    # Ensure the DataFrame has the correct column order by explicitly specifying the columns
+    #  Convert to DataFrame and ensure column alignment
     new_data_df = pd.DataFrame([new_data], columns=["product_name", "price", "discount", "date"])
 
-    # Append the new data to the existing competitor DataFrame
-    # Use `pd.concat` to combine the DataFrames and reset the index to avoid duplicate indices
+    # Append data correctly
     competitor_df = pd.concat([competitor_df, new_data_df], ignore_index=True)
 
-    # Save the updated DataFrame to the competitor_data.csv file
-    # The `index=False` argument ensures that the DataFrame index is not written to the file
+    # Save without extra columns
     competitor_df.to_csv("competitor_data.csv", index=False)
 
-# API keys and configuration
-API_KEY = "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"
-# This is an API key for accessing the Groq API, which is likely used to interact with a machine learning or AI service.
-SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
-# This is a Slack webhook URL, which is used to send automated messages or notifications to a specific Slack channel.
-
+    
+# API keys
+API_KEY = "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"  # Groq API Key
+SLACK_WEBHOOK = "https://hooks.slack.com/services/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"  # Slack webhook URL
 # Streamlit app setup
 st.set_page_config(layout="wide")
-# This configures the Streamlit app to use a wide layout, which means the app will take up more horizontal space on the screen
-# making it easier to display content side by side.
+# Create two columns
+col1, col2 = st.columns(2)
 
-# Create two columns in the Streamlit app
-col1, col2 = st.columns(2)  # This creates two columns in the Streamlit app interface.
-# These columns can be used to organize and display content (e.g., text, charts, inputs) side by side for better readability and layout design.
-
-# Add content to the first column (col1)
+# Add content to the first column
 with col1:
-    # Use Streamlit's markdown function to display styled HTML content
-    st.markdown(
+     st.markdown(
         """
         <div style="font-size: 40px; text-align: left; width: 100%;">
             ❄️❄️❄️<strong>E-Commerce Competitor Strategy Dashboard</strong>❄️❄️❄️
         </div>
         """,
-        unsafe_allow_html=True,  # Allow HTML rendering for custom styling
+        unsafe_allow_html=True,
     )
-    # This displays a large, bold heading for the dashboard with snowflake emojis for decoration.
 
-# Add a GIF to the second column (col2)
+# Add GIF to the second column
 with col2:
-    # Use Streamlit's markdown function to display an image (GIF) aligned to the right
     st.markdown(
         """
         <div style="text-align: right;">
             <img src="https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExbzh4dXpuc2hpY3JlNnR1MDdiMXozMXlreHFoZjl0a2g5anJqNWxtMCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/hWe6YajFuxX41eV8I0/giphy.gif" alt="Engaging GIF" width="300">
         </div>
         """,
-        unsafe_allow_html=True,  # Allow HTML rendering for embedding the GIF
+        unsafe_allow_html=True,
     )
-    # This displays an engaging GIF on the right side of the dashboard to make the interface more visually appealing.
-
 
 # Utility function to truncate text
 def truncate_text(text, max_length=512):
-    """Truncate text to a specified maximum length."""
-    return text[:max_length]  # Return the first `max_length` characters of the text
-    # This function is useful for limiting the length of text (e.g., reviews) to avoid overwhelming the UI.
+    return text[:max_length]
 
-
-# Load competitor data from a CSV file
+# Load competitor data
 def load_competitor_data():
     """Load competitor data from a CSV file."""
-    data = pd.read_csv("competitor_data.csv")  # Read the CSV file into a DataFrame
-    st.write(data.head())  # Display the first few rows of the data for debugging purposes
-    return data  # Return the loaded data
-    # This function loads competitor pricing and discount data for analysis.
+    data = pd.read_csv("competitor_data.csv")
+    return data
 
-
-# Load reviews data from a CSV file
+# Load reviews data
 def load_reviews_data():
     """Load reviews data from a CSV file."""
-    reviews = pd.read_csv("reviews.csv")  # Read the CSV file into a DataFrame
-    return reviews  # Return the loaded reviews
-    # This function loads customer reviews for sentiment analysis.
+    reviews = pd.read_csv("reviews.csv")
+    return reviews
 
-
-# Analyze customer sentiment using a pre-trained NLP model
+# Analyze customer sentiment
 def analyze_sentiment(reviews):
     """Analyze customer sentiment for reviews."""
-    sentiment_pipeline = pipeline("sentiment-analysis")  # Load a sentiment analysis pipeline
-    return sentiment_pipeline(reviews)  # Analyze the sentiment of the reviews and return the results
-    # This function uses Hugging Face's `transformers` library to determine if reviews are positive, negative, or neutral.
+    sentiment_pipeline = pipeline("sentiment-analysis")
+    return sentiment_pipeline(reviews)
 
-# Train a predictive model for competitor pricing strategy
+# Train predictive model
 def train_predictive_model(data):
     """Train a predictive model for competitor pricing strategy."""
-    # Clean the "Discount" column by removing the percentage sign and converting to float
     data["Discount"] = data["Discount"].str.replace("%", "").astype(float)
-    # Convert the "Price" column to float
     data["Price"] = data["Price"].astype(float)
-    # Create a new column "Predicted_Discount" by adding 5% of the price to the current discount
     data["Predicted_Discount"] = data["Discount"] + (data["Price"] * 0.05).round(2)
 
-    # Define features (X) and target (y) for the model
-    X = data[["Price", "Discount"]]  # Features: Price and Discount
-    y = data["Predicted_Discount"]  # Target: Predicted_Discount
+    X = data[["Price", "Discount"]]
+    y = data["Predicted_Discount"]
 
-    # Split the data into training and testing sets (80% training, 20% testing)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    # Initialize a Random Forest Regressor model
     model = RandomForestRegressor(random_state=42)
-    # Train the model on the training data
     model.fit(X_train, y_train)
-    # Return the trained model
     return model
 
-
-# Forecast future discounts using the ARIMA model
+# Forecast discounts using ARIMA
 def forecast_discounts_arima(data, future_days=5):
     """
     Forecast future discounts using ARIMA.
@@ -391,69 +263,46 @@ def forecast_discounts_arima(data, future_days=5):
     :param future_days: Number of days to forecast.
     :return: DataFrame with historical and forecasted discounts.
     """
-    # Sort the data by its index (assumed to be dates)
     data = data.sort_index()
-    # Convert the "discount" column to numeric, handling errors by coercing invalid values to NaN
     data["discount"] = pd.to_numeric(data["discount"], errors="coerce")
-    # Drop rows with NaN values in the "discount" column
     data = data.dropna(subset=["discount"])
 
-    # Extract the discount series for modeling
     discount_series = data["discount"]
 
-    # Ensure the index is a DatetimeIndex
     if not isinstance(data.index, pd.DatetimeIndex):
         try:
-            # Convert the index to a DatetimeIndex
             data.index = pd.to_datetime(data.index)
         except Exception as e:
-            # Raise an error if the index cannot be converted to datetime
             raise ValueError("Index must be datetime or convertible to datetime.") from e
 
-    # Initialize an ARIMA model with order (5, 1, 0)
     model = ARIMA(discount_series, order=(5, 1, 0))
-    # Fit the ARIMA model to the data
     model_fit = model.fit()
 
-    # Forecast future discounts for the specified number of days
     forecast = model_fit.forecast(steps=future_days)
-    # Generate future dates for the forecasted values
     future_dates = pd.date_range(
-        start=discount_series.index[-1] + pd.Timedelta(days=1),  # Start from the day after the last date
-        periods=future_days  # Number of days to forecast
+        start=discount_series.index[-1] + pd.Timedelta(days=1),
+        periods=future_days
     )
 
-    # Create a DataFrame to store the forecasted discounts and their corresponding dates
     forecast_df = pd.DataFrame({"Date": future_dates, "Predicted_Discount": forecast})
-    # Set the "Date" column as the index
     forecast_df.set_index("Date", inplace=True)
-    # Return the forecast DataFrame
     return forecast_df
-
 
 # Send notifications to Slack
 def send_to_slack(data):
-    """Send a notification to Slack using a webhook."""
-    # Create the payload with the text to send
     payload = {"text": data}
-    # Send a POST request to the Slack webhook URL
     response = requests.post(
-        SLACK_WEBHOOK,  # Slack webhook URL
-        data=json.dumps(payload),  # Convert payload to JSON
-        headers={"Content-Type": "application/json"}  # Set content type to JSON
+        SLACK_WEBHOOK,
+        data=json.dumps(payload),
+        headers={"Content-Type": "application/json"}
     )
-    # Check if the request was successful (status code 200)
     if response.status_code != 200:
-        # Display an error message if the notification failed
         st.write(f"Failed to send notification to Slack: {response.status_code}")
 
-
-# Generate strategy recommendations using a Large Language Model (LLM)
+# Generate strategy recommendations using an LLM
 def generate_strategy_recommendation(product_name, competitor_data, sentiment):
     """Generate strategic recommendations using an LLM."""
-    # Get the current date
     date = datetime.now()
-    # Create a detailed prompt for the LLM
     prompt = f"""
     You are a highly skilled business strategist specializing in e-commerce. Based on the following details, suggest actionable strategies:
 
@@ -475,117 +324,79 @@ def generate_strategy_recommendation(product_name, competitor_data, sentiment):
     - **Customer Satisfaction Recommendations**
     """
 
-    # Prepare the data for the API request
     data = {
-        "messages": [{"role": "user", "content": prompt}],  # Include the prompt in the messages
-        "model": "llama3-8b-8192",  # Specify the LLM model to use
-        "temperature": 0,  # Set temperature to 0 for deterministic responses
+        "messages": [{"role": "user", "content": prompt}],
+        "model": "llama3-8b-8192",
+        "temperature": 0,
     }
 
-    # Set headers for the API request, including the API key for authentication
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"}
-    # Send a POST request to the Groq API
     res = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",  # API endpoint
-        data=json.dumps(data),  # Convert data to JSON
-        headers=headers,  # Include headers
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=json.dumps(data),
+        headers=headers,
     )
-    # Parse the JSON response
     res = res.json()
-    # Extract the generated response from the API
     response = res["choices"][0]["message"]["content"]
-    # Return the generated response
     return response
 
 # Streamlit UI
 
-# Add a header to the sidebar for product selection
 st.sidebar.header("❄️Select a Product❄️")
 
-
-# Function to get a list of unique products from the competitor data
 def get_product_list():
     try:
-        # Load competitor data from the CSV file
         competitor_df = pd.read_csv("competitor_data.csv")
-        # Extract unique product names and convert them to a list
         return competitor_df["product_name"].drop_duplicates().tolist()
     except FileNotFoundError:
-        # Return an empty list if the file is not found
         return []
 
-
-# Get the list of products
 products = get_product_list()
 
-# Add a dropdown in the sidebar to select a product
 selected_product = st.sidebar.selectbox("Choose a product to analyze:", products)
 
-# Load competitor and reviews data
 competitor_data = load_competitor_data()
 reviews_data = load_reviews_data()
 
-# Filter data for the selected product
 product_data = competitor_data[competitor_data["product_name"] == selected_product]
 product_reviews = reviews_data[reviews_data["product_name"] == selected_product]
 
-# Display the competitor analysis header
 st.header(f"Competitor Analysis for {selected_product}")
-# Display the competitor data section
 st.subheader("Competitor Data")
-# Show the last 5 rows of the competitor data in a table
 st.table(product_data.tail(5))
 
-# Check if there are reviews available for the selected product
 if not product_reviews.empty:
-    # Truncate review text to 512 characters for better display
-    product_reviews.loc[:, "review"] = product_reviews["review"].apply(lambda x: truncate_text(x, 512))
+    product_reviews.loc[:, "review"] = product_reviews["review"].apply(lambda x: truncate_text(x, 1024))
 
-    # Extract reviews and analyze their sentiment
     reviews = product_reviews["review"].tolist()
     sentiments = analyze_sentiment(reviews)
 
-    # Display the sentiment analysis results
     st.subheader("Customer Sentiment Analysis")
-    # Convert sentiment results to a DataFrame
     sentiment_df = pd.DataFrame(sentiments)
-    # Create a bar chart to visualize sentiment distribution
     fig = px.bar(sentiment_df, x="label", title="Sentiment Analysis Results")
-    # Display the chart in the Streamlit app
     st.plotly_chart(fig)
 else:
-    # Display a message if no reviews are available
     st.write("No reviews available for this product.")
 
-# Prepare the data for forecasting
-# Convert the "date" column to datetime format
 product_data["date"] = pd.to_datetime(product_data["date"], errors="coerce")
-# Set the index to a date range starting from the minimum date in the data
-product_data.index = pd.date_range(start=product_data.index.min(), periods=len(product_data), freq="D")
-# Convert the "discount" column to numeric, handling errors by coercing invalid values to NaN
+# product_data = product_data.dropna(subset=["Date"])
+product_data.index= pd.date_range(start=product_data.index.min(), periods=len(product_data), freq="D")
 product_data["discount"] = pd.to_numeric(product_data["discount"], errors="coerce")
-# Drop rows with NaN values in the "discount" column
 product_data = product_data.dropna(subset=["discount"])
 
 # Forecasting Model
-# Use the ARIMA model to forecast future discounts
 product_data_with_predictions = forecast_discounts_arima(product_data)
 
-# Display the current and predicted discounts
 st.subheader("Competitor Current and Predicted Discounts")
-# Show the last 10 rows of the predicted discounts in a table
 st.table(product_data_with_predictions[["Predicted_Discount"]].tail(10))
 
-# Generate strategic recommendations using the LLM
-recommendations = generate_strategy_recommendation(
-    selected_product,  # Selected product name
-    product_data_with_predictions,  # Competitor data with predictions
-    sentiments if not product_reviews.empty else "No reviews available",  # Sentiment analysis results
-)
 
-# Display the strategic recommendations
+recommendations = generate_strategy_recommendation(
+    selected_product,
+    product_data_with_predictions,
+    sentiments if not product_reviews.empty else "No reviews available",
+)
 st.subheader("Strategic Recommendations")
 st.write(recommendations)
 
-# Send the recommendations to Slack
 send_to_slack(recommendations)
